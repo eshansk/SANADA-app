@@ -38,7 +38,11 @@ STATIC_STEMS_DIR = os.path.join(BASE_DIR, "backend", "static", "stems")
 class SANADAInferenceEngine:
     def __init__(self, device=None):
         if device is None:
-            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            dev_env = os.getenv("SANADA_DEVICE")
+            if dev_env:
+                self.device = torch.device(dev_env)
+            else:
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         else:
             self.device = torch.device(device)
             
