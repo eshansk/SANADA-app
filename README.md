@@ -87,18 +87,17 @@ SANADA/
 
 ---
 
-## 5. Quickstart & Verification
+## 5. Quickstart & Launching the App
 
-### Running the Backend API Service
+### Running the App (Hugging Face Backend Mode)
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Launch the backend server
-python3 backend/app.py
+./start_system.sh
 ```
-* Open **`http://localhost:8000/docs`** for interactive Swagger API documentation.
-* The API serves CORS-enabled endpoints consumed by Member 1's frontend application.
+* Launches the SANADA Client on **`http://localhost:3000`**.
+* Connects directly to the live 24/7 ZeroGPU backend on Hugging Face:
+  * Backend URL: **`https://eshansk-sanada-backend.hf.space`**
+  * Interactive API Docs: **`https://eshansk-sanada-backend.hf.space/docs`**
+  * Live Health Status: **`https://eshansk-sanada-backend.hf.space/api/health`**
 
 ### Running Verification & Test Suites
 ```bash

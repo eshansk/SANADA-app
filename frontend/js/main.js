@@ -74,7 +74,7 @@ function initPingButton() {
         if (ok) {
             showToast('Backend API is healthy and reachable!', 'success');
         } else {
-            showToast(`Cannot connect to ${API_BASE}. Start backend/app.py.`, 'warning');
+            showToast(`Cannot connect to backend (${API_BASE}). Check network connection.`, 'warning');
         }
     });
 }

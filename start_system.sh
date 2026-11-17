@@ -1,44 +1,53 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # start_system.sh
-# SANADA Machine Listening Full-Stack Launcher (Member 5)
-# Starts both the FastAPI Backend API (Port 8000) and Frontend UI (Port 3000)
+# SANADA Full-Stack App Launcher (Hugging Face Cloud Backend Mode)
+# Starts the lightweight client & API proxy server connected to Hugging Face
 # ==============================================================================
 
-echo "=================================================================="
-echo " 🎧 Starting SANADA Full-Stack Machine Listening System"
-echo "=================================================================="
+BACKEND_URL="${BACKEND_URL:-https://eshansk-sanada-backend.hf.space}"
+PORT="${PORT:-3000}"
 
-# Function to clean up background processes upon exit
+echo "=================================================================="
+echo " 🎧 Starting SANADA App (Hugging Face Backend Mode)"
+echo "=================================================================="
+echo " • Cloud Backend URL : $BACKEND_URL"
+echo " • Checking backend health..."
+
+# Quick health ping to Hugging Face Space
+HEALTH_CHECK=$(curl -s -m 6 "$BACKEND_URL/api/health" 2>/dev/null)
+if [[ $HEALTH_CHECK == *"online"* ]]; then
+    echo " ✅ Hugging Face Backend is ONLINE and healthy!"
+else
+    echo " ⚠️ Hugging Face backend is connecting or waking up..."
+    echo "    Space URL: https://huggingface.co/spaces/eshansk/sanada-backend"
+fi
+
 cleanup() {
     echo ""
-    echo "Shutting down SANADA services..."
-    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+    echo "Shutting down SANADA App server..."
+    kill $SERVER_PID 2>/dev/null
     exit 0
 }
 trap cleanup SIGINT SIGTERM
 
-# 1. Start Backend API Server
-echo " [1/2] Starting Backend API (FastAPI) on http://127.0.0.1:8000 ..."
-python3 backend/app.py &
-BACKEND_PID=$!
+# Export configuration for dev_server.py
+export BACKEND_URL="$BACKEND_URL"
+export PORT="$PORT"
 
-# Wait briefly for model checkpoints and engine to initialize
-sleep 2
-
-# 2. Start Unified Frontend & API Proxy Server
-echo " [2/2] Starting Unified Server (Frontend & API Proxy) on http://0.0.0.0:3000 ..."
+echo ""
+echo " Starting SANADA App Server on http://0.0.0.0:$PORT ..."
 python3 dev_server.py &
-FRONTEND_PID=$!
+SERVER_PID=$!
 
 echo "------------------------------------------------------------------"
 echo " 🚀 System is LIVE and ready:"
-echo "    • Unified Web Client  : http://localhost:3000 (serves UI & proxies /api)"
-echo "    • Backend API Direct  : http://localhost:8000"
-echo "    • Interactive API Docs: http://localhost:8000/docs"
-echo "    • Public Tunnel Ready : Run '~/cloudflared tunnel --url http://localhost:3000'"
+echo "    • Local Web Client     : http://localhost:$PORT"
+echo "    • Cloud Backend API    : $BACKEND_URL"
+echo "    • Cloud API Docs       : $BACKEND_URL/docs"
+echo "    • Cloud API Health     : $BACKEND_URL/api/health"
 echo "------------------------------------------------------------------"
-echo " Press [CTRL + C] anytime to stop both servers."
+echo " Press [CTRL + C] anytime to stop the server."
 echo "=================================================================="
 
 wait

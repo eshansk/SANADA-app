@@ -16,7 +16,7 @@ import http.server
 import requests
 
 PORT = int(os.environ.get("PORT", 3000))
-BACKEND = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+BACKEND = os.environ.get("BACKEND_URL", "https://eshansk-sanada-backend.hf.space").rstrip("/")
 FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "frontend"))
 
 class UnifiedProxyHandler(http.server.SimpleHTTPRequestHandler):
