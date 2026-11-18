@@ -80,6 +80,7 @@ def root():
             "stats": "/api/stats",
             "upload": "/api/upload",
             "predict": "/api/predict",
+            "predict_live": "/api/predict/live",
             "train": "/api/train",
             "save_model": "/api/save-model",
             "stems": "/static/stems/"
@@ -220,9 +221,11 @@ async def validate_audio_upload(file: UploadFile = File(...)):
 async def run_prediction(
     file: UploadFile = File(...),
     task: str = Form("all"),
-    threshold: float = Form(0.5)
+    threshold: float = Form(0.5),
+    mode: str = Form("auto"),
+    all_4_stems: bool = Form(False)
 ):
-    """Multi-task audio inference endpoint."""
+    """Multi-task audio inference endpoint across 3 conditioning modes."""
     contents = await file.read()
     try:
         data, sr = sf.read(io.BytesIO(contents))
@@ -237,17 +240,61 @@ async def run_prediction(
         sample_rate=sr,
         task=task,
         threshold=threshold,
-        filename=file.filename
+        filename=file.filename,
+        mode=mode,
+        all_4_stems=all_4_stems
     )
-    
+
+    mode_used = results.get("mode_used", mode)
+    duration_s = results.get("duration_sec", round(len(data) / sr, 3) if sr else 8.0)
+    input_rms = results.get("input_rms", 0.0)
+    predicted_k = results.get("predicted_k", results.get("source_counting", {}).get("predicted_k", 0))
+    raw_k = results.get("raw_k", results.get("source_counting", {}).get("raw_k", 0.0))
+    calibrated_k = results.get("calibrated_k", results.get("source_counting", {}).get("calibrated_k", 0.0))
+    complexity_ceiling = results.get("complexity_ceiling_exceeded", results.get("source_counting", {}).get("complexity_ceiling_exceeded", False))
+    active_events = results.get("active_events", results.get("environmental_events", {}).get("active_events", []))
+    top_5_events = results.get("top_5_events", results.get("environmental_events", {}).get("top_k_events", []))
+    separated_stems = results.get("separated_stems", results.get("source_separation", {}).get("stems", []))
+    all_4_raw_stems = results.get("all_4_raw_stems", results.get("source_separation", {}).get("all_4_raw_stems"))
+
     return {
         "status": "success",
         "filename": file.filename,
-        "duration_s": 8.0,
+        "mode_used": mode_used,
+        "duration_sec": duration_s,
+        "duration_s": duration_s,
         "sample_rate_hz": TARGET_SR,
+        "input_rms": input_rms,
+        "predicted_k": predicted_k,
+        "raw_k": raw_k,
+        "calibrated_k": calibrated_k,
+        "complexity_ceiling_exceeded": complexity_ceiling,
+        "active_events": active_events,
+        "top_5_events": top_5_events,
+        "separated_stems": separated_stems,
+        "all_4_raw_stems": all_4_raw_stems,
         "task_executed": task,
         "results": results
     }
+
+
+@app.post("/api/predict/live")
+async def run_live_prediction(
+    file: UploadFile = File(...),
+    threshold: float = Form(0.5),
+    all_4_stems: bool = Form(False)
+):
+    """
+    Dedicated live microphone inference endpoint.
+    Applies live_mic conditioning (60Hz highpass, adaptive VAD gate, +28dB max loudness matching, percussive margin).
+    """
+    return await run_prediction(
+        file=file,
+        task="all",
+        threshold=threshold,
+        mode="live_mic",
+        all_4_stems=all_4_stems
+    )
 
 @app.get("/api/demo-mixtures")
 def get_demo_catalog():

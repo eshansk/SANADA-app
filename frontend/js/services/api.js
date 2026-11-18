@@ -36,16 +36,34 @@ export const API = {
     /**
      * Multi-task machine listening prediction (POST /api/predict)
      * Executes Task 1 (Counting), Task 2 (Tagging), and Task 3 (Separation)
+     * Supports mode: 'auto' | 'sanada' | 'computer' | 'live_mic'
      */
-    async predictAudio(file, task = 'all') {
+    async predictAudio(file, task = 'all', mode = 'auto', all_4_stems = false) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('task', task);
+        formData.append('mode', mode);
+        formData.append('all_4_stems', all_4_stems ? 'true' : 'false');
         const res = await fetch(`${API_BASE}/api/predict`, {
             method: 'POST',
             body: formData
         });
         if (!res.ok) throw new Error(`Inference request failed: HTTP ${res.status}`);
+        return await res.json();
+    },
+
+    /**
+     * Dedicated live microphone inference (POST /api/predict/live)
+     */
+    async predictLiveAudio(file, all_4_stems = false) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('all_4_stems', all_4_stems ? 'true' : 'false');
+        const res = await fetch(`${API_BASE}/api/predict/live`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!res.ok) throw new Error(`Live inference failed: HTTP ${res.status}`);
         return await res.json();
     },
 

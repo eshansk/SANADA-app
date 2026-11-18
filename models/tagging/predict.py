@@ -361,8 +361,12 @@ def label_separated_stems(
     candidate_confs = []
     if mixture_top_k_tags:
         for idx, t in enumerate(mixture_top_k_tags):
-            name = t.get("label") or t.get("class_name") or str(t)
-            conf = t.get("confidence") or t.get("probability") or (0.94 - idx * 0.02)
+            if isinstance(t, dict):
+                name = t.get("label") or t.get("class_name") or str(t)
+                conf = t.get("confidence") or t.get("probability") or (0.94 - idx * 0.02)
+            else:
+                name = str(t)
+                conf = max(0.5, 0.94 - idx * 0.02)
             candidate_labels.append(name)
             candidate_confs.append(float(conf))
 

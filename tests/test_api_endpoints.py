@@ -34,6 +34,8 @@ client = TestClient(app)
 SAMPLE_WAV_PATH = os.path.join(
     BASE_DIR, "SANADA", "Org_Fsd_Mix", "Org_Mix_4_Sounds_Variable", "train", "mix_00000.wav"
 )
+if not os.path.exists(SAMPLE_WAV_PATH):
+    SAMPLE_WAV_PATH = os.path.join(BASE_DIR, "backend", "static", "demos", "mix_00000.wav")
 
 def run_api_tests():
     print("=" * 85)
@@ -82,14 +84,43 @@ def run_api_tests():
     print(f" [PASS] Audio Standard Validated: {data['standard_compliant']} | 16 kHz Mono 8.0s")
 
     # 4. Predict
-    print("\n[TEST 4] POST /api/predict (End-User Inference)...")
+    print("\n[TEST 4] POST /api/predict (End-User Inference with Multi-Mode Support)...")
     with open(SAMPLE_WAV_PATH, "rb") as f:
         t0 = time.time()
-        res = client.post("/api/predict", files={"file": ("mix_00000.wav", f, "audio/wav")}, data={"task": "all"})
+        res = client.post(
+            "/api/predict",
+            files={"file": ("mix_00000.wav", f, "audio/wav")},
+            data={"task": "all", "mode": "auto", "all_4_stems": "true"}
+        )
         lat = round((time.time() - t0) * 1000, 2)
     assert res.status_code == 200
-    pred = res.json()["results"]
-    print(f" [PASS] Latency: {lat} ms | Estimated K: {pred['source_counting']['estimated_k']} | Stems: {len(pred['source_separation']['stems'])}")
+    res_json = res.json()
+    assert res_json["mode_used"] in ["sanada", "computer", "live_mic"]
+    assert "duration_sec" in res_json
+    assert "input_rms" in res_json
+    assert "predicted_k" in res_json
+    assert "calibrated_k" in res_json
+    assert "active_events" in res_json
+    assert "top_5_events" in res_json
+    assert "separated_stems" in res_json
+    assert "all_4_raw_stems" in res_json and len(res_json["all_4_raw_stems"]) == 4
+    pred = res_json["results"]
+    print(f" [PASS] Latency: {lat} ms | Mode: {res_json['mode_used']} | Predicted K: {res_json['predicted_k']} (Calibrated: {res_json['calibrated_k']}) | Stems: {len(res_json['separated_stems'])}")
+
+    # 4b. Dedicated Live Microphone Endpoint (/api/predict/live)
+    print("\n[TEST 4b] POST /api/predict/live (Dedicated Live Mic Route)...")
+    with open(SAMPLE_WAV_PATH, "rb") as f:
+        t0 = time.time()
+        res_live = client.post(
+            "/api/predict/live",
+            files={"file": ("live_mic_stream.wav", f, "audio/wav")},
+            data={"all_4_stems": "false"}
+        )
+        lat_live = round((time.time() - t0) * 1000, 2)
+    assert res_live.status_code == 200
+    live_json = res_live.json()
+    assert live_json["mode_used"] == "live_mic"
+    print(f" [PASS] Live Mic Route Latency: {lat_live} ms | Mode: {live_json['mode_used']} | Predicted K: {live_json['predicted_k']}")
 
     # 5. Developer Training Trigger (/api/train)
     print("\n[TEST 5] POST /api/train (Developer Training Trigger)...")

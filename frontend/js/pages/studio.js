@@ -74,6 +74,8 @@ export function initStudioPage() {
 
         // Inference Dispatch
         taskSelect: document.getElementById('taskSelect'),
+        modeSelect: document.getElementById('modeSelect'),
+        allStemsCheck: document.getElementById('allStemsCheck'),
         runInferenceBtn: document.getElementById('runInferenceBtn'),
         inferenceBtnText: document.getElementById('inferenceBtnText'),
         inferenceBtnIcon: document.getElementById('inferenceBtnIcon'),
@@ -451,6 +453,7 @@ export function initStudioPage() {
                         activeBuffer = buffer;
                         const blob = audioEngine.bufferToWavBlob(buffer);
                         activeFile = new File([blob], `mic_capture_${Date.now().toString().slice(-4)}.wav`, { type: 'audio/wav' });
+                        if (DOM.modeSelect) DOM.modeSelect.value = 'live_mic';
                         displayDecodedBuffer(activeFile.name, buffer);
                         triggerPreflightValidation(activeFile);
                     },
@@ -538,10 +541,12 @@ export function initStudioPage() {
             });
 
             const task = DOM.taskSelect ? DOM.taskSelect.value : 'all';
+            const mode = DOM.modeSelect ? DOM.modeSelect.value : 'auto';
+            const all4Stems = DOM.allStemsCheck ? DOM.allStemsCheck.checked : false;
             DOM.runInferenceBtn.disabled = true;
             if (DOM.runInferenceMobileBtn) DOM.runInferenceMobileBtn.disabled = true;
             if (DOM.inferenceBtnIcon) DOM.inferenceBtnIcon.innerHTML = '<div class="spinner"></div>';
-            if (DOM.inferenceBtnText) DOM.inferenceBtnText.textContent = 'Executing Neural Tasks...';
+            if (DOM.inferenceBtnText) DOM.inferenceBtnText.textContent = `Executing [${mode.toUpperCase()}] Tasks...`;
             if (DOM.inferenceProgressBar) DOM.inferenceProgressBar.style.display = 'block';
 
             // Add shimmer effect to result cards during inference
@@ -549,9 +554,10 @@ export function initStudioPage() {
             resultCards.forEach(c => c.classList.add('is-shimmering'));
 
             try {
-                const data = await API.predictAudio(activeFile, task);
-                renderPredictionResults(data.results);
-                showToast('Neural listening inference completed successfully!', 'success');
+                const data = await API.predictAudio(activeFile, task, mode, all4Stems);
+                renderPredictionResults(data.results || data);
+                const modeLabel = data.mode_used ? ` [${data.mode_used.toUpperCase()}]` : '';
+                showToast(`Neural listening inference${modeLabel} completed successfully!`, 'success');
             } catch (err) {
                 showToast('Backend offline; activating high-fidelity simulation.', 'warning');
                 renderMockResults();
@@ -599,11 +605,21 @@ export function initStudioPage() {
         // Task 1: Source Counting
         if (results.source_counting && DOM.kHeroNumber) {
             const count = results.source_counting;
-            animateCountUp(DOM.kHeroNumber, count.estimated_k);
-            updateSegmentedMeter(count.estimated_k);
+            const dispK = count.predicted_k !== undefined ? count.predicted_k : count.estimated_k;
+            animateCountUp(DOM.kHeroNumber, dispK);
+            updateSegmentedMeter(dispK);
             if (DOM.kHeroSub) DOM.kHeroSub.textContent = `Confidence: ${(count.confidence * 100).toFixed(1)}%`;
-            if (DOM.kModelBadge) DOM.kModelBadge.textContent = count.model;
-            if (DOM.kContinuousVal) DOM.kContinuousVal.textContent = count.raw_continuous_prediction.toFixed(3);
+            if (DOM.kModelBadge) {
+                const modeTag = results.mode_used ? ` [${results.mode_used.toUpperCase()}]` : '';
+                DOM.kModelBadge.textContent = `${count.model}${modeTag}`;
+            }
+            if (DOM.kContinuousVal) {
+                if (count.calibrated_k !== undefined) {
+                    DOM.kContinuousVal.textContent = `Cal: ${count.calibrated_k.toFixed(2)} (Raw: ${count.raw_k.toFixed(2)})`;
+                } else {
+                    DOM.kContinuousVal.textContent = count.raw_continuous_prediction.toFixed(3);
+                }
+            }
         }
 
         // Task 2: Multi-Label Tagging (Active: solid white pills + check; Candidates: outlined 40% white; Bars: white / 25% white)
