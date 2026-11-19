@@ -29,7 +29,7 @@ import soundfile as sf
 import numpy as np
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -223,7 +223,9 @@ async def run_prediction(
     task: str = Form("all"),
     threshold: float = Form(0.5),
     mode: str = Form("auto"),
-    all_4_stems: bool = Form(False)
+    all_4_stems: bool = Form(False),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    authorization: Optional[str] = Header(None)
 ):
     """Multi-task audio inference endpoint across 3 conditioning modes."""
     contents = await file.read()
@@ -245,6 +247,15 @@ async def run_prediction(
         all_4_stems=all_4_stems
     )
 
+    # Extract API key if provided via X-API-Key or Bearer token
+    api_key = x_api_key
+    if not api_key and authorization:
+        auth_parts = authorization.strip().split()
+        if len(auth_parts) == 2 and auth_parts[0].lower() == "bearer":
+            api_key = auth_parts[1]
+        elif len(auth_parts) == 1:
+            api_key = auth_parts[0]
+
     mode_used = results.get("mode_used", mode)
     duration_s = results.get("duration_sec", round(len(data) / sr, 3) if sr else 8.0)
     input_rms = results.get("input_rms", 0.0)
@@ -257,7 +268,7 @@ async def run_prediction(
     separated_stems = results.get("separated_stems", results.get("source_separation", {}).get("stems", []))
     all_4_raw_stems = results.get("all_4_raw_stems", results.get("source_separation", {}).get("all_4_raw_stems"))
 
-    return {
+    response_payload = {
         "status": "success",
         "filename": file.filename,
         "mode_used": mode_used,
@@ -276,6 +287,12 @@ async def run_prediction(
         "task_executed": task,
         "results": results
     }
+
+    if api_key:
+        response_payload["api_authenticated"] = True
+        response_payload["api_key_prefix"] = api_key[:16] + "..." if len(api_key) > 16 else api_key
+
+    return response_payload
 
 
 @app.post("/api/predict/live")
