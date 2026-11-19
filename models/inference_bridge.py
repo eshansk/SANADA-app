@@ -402,6 +402,9 @@ class SANADAInferenceEngine:
             **results
         }
 
+    # Backward compatibility alias
+    predict_full_pipeline = run_full_inference
+
 
 if __name__ == "__main__":
     print("Testing SANADA Inference Engine Bridge (Member 5)...")
