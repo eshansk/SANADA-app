@@ -91,9 +91,9 @@
 
     .liquid-glass-strong:active,
     .liquid-glass-strong.is-tapped {
-        transform: translateY(-3px) scale(0.992);
-        box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.7),
-                    0 0 24px color-mix(in srgb, var(--wave-1) 25%, transparent);
+        transform: translateY(-3.5px);
+        box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7),
+                    0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
     }
 
     .liquid-glass-strong:active::before,
@@ -350,6 +350,9 @@
         -webkit-backdrop-filter: blur(28px) saturate(150%);
         position: relative;
         overflow: hidden;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        -webkit-font-smoothing: antialiased;
         transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
                     box-shadow 0.28s ease;
         -webkit-tap-highlight-color: transparent;
@@ -400,6 +403,9 @@
         position: relative;
         overflow: hidden;
         box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.55);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        -webkit-font-smoothing: antialiased;
         transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
                     box-shadow 0.28s ease;
         -webkit-tap-highlight-color: transparent;
@@ -474,7 +480,21 @@
         opacity: 0.42;
     }
 
-    /* CARD & TILE HOVER: FLUID TACTILE LIFT & SHIFTING DUAL-BEVEL REFLECTION */
+    /* DEFAULT RESTING STATE FOR ALL 3D CARDS & TILES (NO 3D TRANSFORM AT REST TO PRESERVE CRYSTAL SHARP TEXT) */
+    .card,
+    .stat-tile,
+    .home-task-card,
+    .ceiling-explorer-card,
+    .auth-card,
+    .pipeline-step-card,
+    #pageHome .card,
+    #pageHome .stat-tile {
+        transform: none;
+        transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                    box-shadow 0.35s ease;
+    }
+
+    /* DESKTOP-ONLY HOVER: 3D PERSPECTIVE TILT & DYNAMIC LIGHT BEVEL REFLECTION (FINE POINTERS ONLY) */
     @media (hover: hover) and (pointer: fine) {
         .card:hover,
         .stat-tile:hover,
@@ -484,7 +504,7 @@
         .pipeline-step-card:hover,
         #pageHome .card:hover,
         #pageHome .stat-tile:hover {
-            transform: translateY(-3.5px);
+            transform: perspective(1200px) translateY(-4px) rotateX(var(--card-rot-x, 0deg)) rotateY(var(--card-rot-y, 0deg));
             border: none;
             outline: none;
             box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7),
@@ -500,8 +520,9 @@
         .pipeline-step-card:hover::before,
         #pageHome .card:hover::before,
         #pageHome .stat-tile:hover::before {
-            transform: translateX(210%);
-            opacity: 0.85;
+            transform: translateX(var(--card-bevel-x, 190%)) translateY(0.4px);
+            opacity: 0.90;
+            box-shadow: 0 1px 8px rgba(255, 255, 255, 0.42);
         }
 
         .card:hover::after,
@@ -513,20 +534,13 @@
         .pipeline-step-card:hover::after,
         #pageHome .card:hover::after,
         #pageHome .stat-tile:hover::after {
-            transform: translateX(-250%);
-            opacity: 0.68;
+            transform: translateX(var(--card-counter-bevel-x, -220%)) translateY(-0.4px);
+            opacity: 0.70;
+            box-shadow: 0 -1px 6px rgba(255, 255, 255, 0.28);
         }
     }
 
-    /* RESPONSIVE MOBILE TOUCH & TAP FEEDBACK (Mobile/Tablet Tap Response) */
-    .card:active,
-    .stat-tile:active,
-    .home-task-card:active,
-    .ceiling-explorer-card:active,
-    .auth-card:active,
-    .pipeline-step-card:active,
-    #pageHome .card:active,
-    #pageHome .stat-tile:active,
+    /* MOBILE TOUCH TAP / ACTIVE FEEDBACK (ACTIVE ONLY WHILE FINGER IS TAPPING OR PRESSING) */
     .card.is-tapped,
     .stat-tile.is-tapped,
     .home-task-card.is-tapped,
@@ -534,23 +548,22 @@
     .auth-card.is-tapped,
     .pipeline-step-card.is-tapped,
     #pageHome .card.is-tapped,
-    #pageHome .stat-tile.is-tapped {
-        transform: translateY(-3px) scale(0.992);
+    #pageHome .stat-tile.is-tapped,
+    .card:active,
+    .stat-tile:active,
+    .home-task-card:active,
+    .ceiling-explorer-card:active,
+    .auth-card:active,
+    .pipeline-step-card:active,
+    #pageHome .card:active,
+    #pageHome .stat-tile:active {
+        transform: perspective(1200px) translateY(-4px) rotateX(var(--card-rot-x, 0deg)) rotateY(var(--card-rot-y, 0deg));
         border: none;
         outline: none;
-        box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.7),
-                    0 0 24px color-mix(in srgb, var(--wave-1) 25%, transparent);
+        box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7),
+                    0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
     }
 
-    .card:active::before,
-    .stat-tile:active::before,
-    .home-task-card:active::before,
-    .ceiling-explorer-card:active::before,
-    .explorer-display-grid:active::before,
-    .auth-card:active::before,
-    .pipeline-step-card:active::before,
-    #pageHome .card:active::before,
-    #pageHome .stat-tile:active::before,
     .card.is-tapped::before,
     .stat-tile.is-tapped::before,
     .home-task-card.is-tapped::before,
@@ -559,20 +572,21 @@
     .auth-card.is-tapped::before,
     .pipeline-step-card.is-tapped::before,
     #pageHome .card.is-tapped::before,
-    #pageHome .stat-tile.is-tapped::before {
-        transform: translateX(210%);
-        opacity: 0.85;
+    #pageHome .stat-tile.is-tapped::before,
+    .card:active::before,
+    .stat-tile:active::before,
+    .home-task-card:active::before,
+    .ceiling-explorer-card:active::before,
+    .explorer-display-grid:active::before,
+    .auth-card:active::before,
+    .pipeline-step-card:active::before,
+    #pageHome .card:active::before,
+    #pageHome .stat-tile:active::before {
+        transform: translateX(var(--card-bevel-x, 190%)) translateY(0.4px);
+        opacity: 0.90;
+        box-shadow: 0 1px 8px rgba(255, 255, 255, 0.42);
     }
 
-    .card:active::after,
-    .stat-tile:active::after,
-    .home-task-card:active::after,
-    .ceiling-explorer-card:active::after,
-    .explorer-display-grid:active::after,
-    .auth-card:active::after,
-    .pipeline-step-card:active::after,
-    #pageHome .card:active::after,
-    #pageHome .stat-tile:active::after,
     .card.is-tapped::after,
     .stat-tile.is-tapped::after,
     .home-task-card.is-tapped::after,
@@ -581,14 +595,26 @@
     .auth-card.is-tapped::after,
     .pipeline-step-card.is-tapped::after,
     #pageHome .card.is-tapped::after,
-    #pageHome .stat-tile.is-tapped::after {
-        transform: translateX(-250%);
-        opacity: 0.68;
+    #pageHome .stat-tile.is-tapped::after,
+    .card:active::after,
+    .stat-tile:active::after,
+    .home-task-card:active::after,
+    .ceiling-explorer-card:active::after,
+    .explorer-display-grid:active::after,
+    .auth-card:active::after,
+    .pipeline-step-card:active::after,
+    #pageHome .card:active::after,
+    #pageHome .stat-tile:active::after {
+        transform: translateX(var(--card-counter-bevel-x, -220%)) translateY(-0.4px);
+        opacity: 0.70;
+        box-shadow: 0 -1px 6px rgba(255, 255, 255, 0.28);
     }
 
     /* NAVBAR & MODAL POPUP BEVEL LIGHT (Only Steady Top Gleam, Zero Hover/Active Effects, No Bottom Light) */
     .nav-inner::after,
-    .auth-modal-card::after {
+    .auth-modal-card::after,
+    .navbar .nav-tabs::after,
+    .nav-tabs::after {
         display: none !important;
         content: none !important;
     }
@@ -902,8 +928,8 @@
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     }
 
-    /* GLASS BUTTON TOP BEVEL LIGHT */
-    .btn:not(.btn-primary)::before {
+    /* TOP BEVEL LIGHT REFLECTION (APPLIED TO BOTH GLASS & SOLID WHITE BUTTONS) */
+    .btn::before {
         content: '';
         position: absolute;
         top: 0;
@@ -914,7 +940,7 @@
             90deg,
             transparent 0%,
             rgba(255, 255, 255, 0.28) 20%,
-            rgba(255, 255, 255, 0.80) 45%,
+            rgba(255, 255, 255, 0.85) 45%,
             rgba(255, 255, 255, 0.25) 75%,
             transparent 100%
         );
@@ -958,8 +984,10 @@
         color: #ffffff;
     }
 
-    /* GLASS BUTTON HOVER: CARD-MATCHING TACTILE LIFT & SHIFTING LIGHT */
-    .btn:not(.btn-primary):hover:not(:disabled) {
+    /* GLASS BUTTON HOVER & TAP: CARD-MATCHING TACTILE LIFT & SHIFTING LIGHT */
+    .btn:not(.btn-primary):hover:not(:disabled),
+    .btn:not(.btn-primary).is-tapped:not(:disabled),
+    .btn:not(.btn-primary):active:not(:disabled) {
         transform: translateY(-3.5px);
         background: var(--glass-fill);
         border: none;
@@ -968,12 +996,17 @@
         color: #ffffff;
     }
 
-    .btn:not(.btn-primary):hover:not(:disabled)::before {
+    /* BUTTON HOVER & TAP: TOP BEVEL LIGHT SWEEP */
+    .btn:hover:not(:disabled)::before,
+    .btn.is-tapped:not(:disabled)::before,
+    .btn:active:not(:disabled)::before {
         transform: translateX(155%);
         opacity: 0.90;
     }
 
-    .btn:not(.btn-primary):hover:not(:disabled)::after {
+    .btn:not(.btn-primary):hover:not(:disabled)::after,
+    .btn:not(.btn-primary).is-tapped:not(:disabled)::after,
+    .btn:not(.btn-primary):active:not(:disabled)::after {
         transform: translateX(-180%);
         opacity: 0.75;
     }
@@ -1025,22 +1058,25 @@
         pointer-events: none;
     }
 
-    /* PRIMARY BUTTON: Solid White Pill with Black Text (No Accent) */
+    /* PRIMARY BUTTON: Solid White Pill with Card Shadow & Top Bevel Light (No White Glow) */
     .btn-primary {
         background: #ffffff;
         color: #000000;
-        border: 1px solid #ffffff;
-        box-shadow: 0 2px 14px rgba(255, 255, 255, 0.2);
+        border: none;
+        outline: none;
+        box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.55);
+        position: relative;
+        overflow: hidden;
     }
 
-    .btn-primary::before {
-        display: none;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.9);
+    .btn-primary:hover:not(:disabled),
+    .btn-primary.is-tapped:not(:disabled),
+    .btn-primary:active:not(:disabled) {
+        background: #ffffff;
         color: #000000;
-        box-shadow: 0 4px 20px rgba(255, 255, 255, 0.35);
+        transform: translateY(-3.5px);
+        box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7),
+                    0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
     }
 
     /* EXCEPTION: Rose Accent for Emergency Actions / Errors */
@@ -1092,25 +1128,32 @@
         justify-content: center;
     }
 
-    /* PRIMARY RUN ACTION BUTTON (.btn-run-inference) */
+    /* PRIMARY RUN ACTION BUTTON (.btn-run-inference) - Card Shadow & Top Bevel Light */
     .btn-run-inference {
         background: #ffffff;
         color: #000000;
-        border: 1px solid #ffffff;
+        border: none;
+        outline: none;
         font-weight: 600;
         font-size: 14px;
         letter-spacing: 0.02em;
         padding: 12px 20px;
         border-radius: var(--radius-full);
-        box-shadow: 0 2px 14px rgba(255, 255, 255, 0.2);
+        box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.55);
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease, background 0.2s ease;
     }
 
-    .btn-run-inference:not(:disabled):hover {
-        background: #f4f4f5;
-        box-shadow: 0 4px 22px rgba(255, 255, 255, 0.35);
-        transform: translateY(-1px);
+    .btn-run-inference:not(:disabled):hover,
+    .btn-run-inference:not(:disabled).is-tapped,
+    .btn-run-inference:not(:disabled):active {
+        background: #ffffff;
+        color: #000000;
+        box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7),
+                    0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
+        transform: translateY(-3.5px);
     }
 
     .btn-run-inference:disabled {

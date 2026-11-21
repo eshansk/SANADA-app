@@ -392,7 +392,10 @@ a:focus:not(:focus-visible),
    Instead of Open Studio button, a LOGIN BUTTON is displayed in Hero and in navbar. */
 body:not([data-role="developer"]):not([data-role="user"]) .navbar .nav-tabs,
 body[data-role="unauthenticated"] .navbar .nav-tabs,
-html[data-role="unauthenticated"] .navbar .nav-tabs {
+html[data-role="unauthenticated"] .navbar .nav-tabs,
+body:not([data-role="developer"]):not([data-role="user"]) .nav-tabs,
+body[data-role="unauthenticated"] .nav-tabs,
+html[data-role="unauthenticated"] .nav-tabs {
     display: none !important;
 }
 
@@ -492,6 +495,9 @@ html[data-role="user"] #pingBtn {
         font-size: 13px !important;
         white-space: nowrap;
     }
+    .navbar .nav-tabs::before {
+        display: none !important;
+    }
 }
 
 body:not([data-role="developer"]):not([data-role="user"]) #heroOpenStudioBtn,
@@ -506,30 +512,66 @@ html[data-role="unauthenticated"] #heroLoginBtn {
     display: inline-flex !important;
 }
 
+body:not([data-role="developer"]):not([data-role="user"]) #heroSignupBtn,
+body[data-role="unauthenticated"] #heroSignupBtn,
+html[data-role="unauthenticated"] #heroSignupBtn {
+    display: inline-flex !important;
+}
+
 body:not([data-role="developer"]):not([data-role="user"]) #navLoginBtn,
 body[data-role="unauthenticated"] #navLoginBtn,
 html[data-role="unauthenticated"] #navLoginBtn {
     display: inline-flex !important;
 }
 
-/* HERO BUTTON SIZING: Equalize Login and Open Studio buttons */
-#heroLoginBtn,
-#heroOpenStudioBtn {
-    min-height: 48px !important;
-    min-width: 170px !important;
-    padding: 13px 32px !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    font-family: var(--font-body) !important;
-    line-height: 1 !important;
-    box-sizing: border-box !important;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    border-radius: var(--radius-full);
+/* Top Navbar Sign Up button: Only visible on desktop (> 1100px) when unauthenticated */
+@media (min-width: 1101px) {
+    body:not([data-role="developer"]):not([data-role="user"]) #navSignupBtn,
+    body[data-role="unauthenticated"] #navSignupBtn,
+    html[data-role="unauthenticated"] #navSignupBtn {
+        display: inline-flex !important;
+    }
 }
 
-/* READ PAPER BUTTON: ONLY visible when logged in as Developer */
+/* HIDE SIGNUP & LOGIN BUTTONS WHEN LOGGED IN (Developer or User) */
+body[data-role="developer"] #heroSignupBtn,
+body[data-role="user"] #heroSignupBtn,
+html[data-role="developer"] #heroSignupBtn,
+html[data-role="user"] #heroSignupBtn,
+body[data-role="developer"] #navSignupBtn,
+body[data-role="user"] #navSignupBtn,
+html[data-role="developer"] #navSignupBtn,
+html[data-role="user"] #navSignupBtn,
+body[data-role="developer"] #heroLoginBtn,
+body[data-role="user"] #heroLoginBtn,
+html[data-role="developer"] #heroLoginBtn,
+html[data-role="user"] #heroLoginBtn,
+body[data-role="developer"] #navLoginBtn,
+body[data-role="user"] #navLoginBtn,
+html[data-role="developer"] #navLoginBtn,
+html[data-role="user"] #navLoginBtn {
+    display: none !important;
+}
+
+/* SHOW ACCOUNT BUTTON WHEN LOGGED IN */
+body[data-role="developer"] #navAccountBtn,
+body[data-role="user"] #navAccountBtn,
+html[data-role="developer"] #navAccountBtn,
+html[data-role="user"] #navAccountBtn {
+    display: inline-flex !important;
+}
+
+/* HIDE ACCOUNT BUTTON WHEN UNAUTHENTICATED */
+body:not([data-role="developer"]):not([data-role="user"]) #navAccountBtn,
+body[data-role="unauthenticated"] #navAccountBtn,
+html[data-role="unauthenticated"] #navAccountBtn {
+    display: none !important;
+}
+
+/* HERO BUTTON SIZING: Equalize Login, Signup, Open Studio, and Read Paper buttons */
+#heroLoginBtn,
+#heroSignupBtn,
+#heroOpenStudioBtn,
 #heroReadPaperBtn {
     min-height: 48px !important;
     min-width: 170px !important;
@@ -543,7 +585,21 @@ html[data-role="unauthenticated"] #navLoginBtn {
     justify-content: center;
     gap: 8px;
     border-radius: var(--radius-full);
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* HERO CTA BUTTON HOVER LIFT (Matching tactile card-lift across primary and glass variants) */
+#heroSignupBtn:hover:not(:disabled),
+#heroReadPaperBtn:hover:not(:disabled),
+#heroSignupBtn.is-tapped,
+#heroReadPaperBtn.is-tapped,
+#heroSignupBtn:active:not(:disabled),
+#heroReadPaperBtn:active:not(:disabled) {
+    transform: translateY(-3.5px);
+    box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7), 0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
+}
+
+/* READ PAPER BUTTON: ONLY visible when logged in as Developer */
 
 body:not([data-role="developer"]) #heroReadPaperBtn,
 html:not([data-role="developer"]) #heroReadPaperBtn {
@@ -618,7 +674,9 @@ html[data-role="user"] #logoutBtn {
     }
 
     .mobile-menu-logout,
-    #mobileMenuLogoutBtn {
+    #mobileMenuLogoutBtn,
+    .mobile-menu-account,
+    #mobileMenuAccountLink {
         display: none !important;
     }
 }
@@ -629,15 +687,38 @@ html[data-role="user"] #logoutBtn {
 @media (max-width: 1100px) {
     .navbar .nav-tabs:not(.open),
     body[data-role="developer"] .navbar .nav-tabs:not(.open),
-    body[data-role="user"] .navbar .nav-tabs:not(.open) {
+    body[data-role="user"] .navbar .nav-tabs:not(.open),
+    .nav-tabs:not(.open),
+    body[data-role="developer"] .nav-tabs:not(.open),
+    body[data-role="user"] .nav-tabs:not(.open) {
         display: none !important;
     }
 
     .navbar .nav-tabs.open,
     body[data-role="developer"] .navbar .nav-tabs.open,
-    body[data-role="user"] .navbar .nav-tabs.open {
+    body[data-role="user"] .navbar .nav-tabs.open,
+    .nav-tabs.open,
+    body[data-role="developer"] .nav-tabs.open,
+    body[data-role="user"] .nav-tabs.open {
         display: flex !important;
         pointer-events: auto !important;
+    }
+
+    /* In mobile menu, display the account option when authenticated */
+    body[data-role="developer"] .mobile-menu-account,
+    body[data-role="user"] .mobile-menu-account,
+    html[data-role="developer"] .mobile-menu-account,
+    html[data-role="user"] .mobile-menu-account {
+        display: flex !important;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+    }
+
+    body:not([data-role="developer"]):not([data-role="user"]) .mobile-menu-account,
+    body[data-role="unauthenticated"] .mobile-menu-account,
+    html[data-role="unauthenticated"] .mobile-menu-account {
+        display: none !important;
     }
 
     /* In mobile menu, display the logout option */
@@ -649,20 +730,27 @@ html[data-role="user"] #logoutBtn {
         align-items: center;
         gap: 8px;
         width: 100%;
-        padding: 12px 16px !important;
-        font-size: 14px !important;
+        padding: 12px 18px !important;
+        font-size: 13.5px !important;
         font-weight: 500 !important;
-        border-radius: var(--radius-md) !important;
-        border-top: 1px solid var(--border-tint) !important;
-        margin-top: 6px !important;
+        border-radius: var(--radius-full) !important;
+        border: none !important;
+        margin-top: 0 !important;
         color: color-mix(in srgb, var(--rose) 85%, #ffffff) !important;
         cursor: pointer;
         transition: background 0.15s ease, color 0.15s ease;
     }
 
-    .mobile-menu-logout:hover {
+    .mobile-menu-logout:hover,
+    .mobile-menu-logout.is-tapped {
         background: color-mix(in srgb, var(--rose) 18%, transparent) !important;
         color: #ffffff !important;
+    }
+
+    /* On mobile, hide the desktop navbar logout button so it only appears in dropdown */
+    .nav-status #logoutBtn,
+    .navbar .nav-status #logoutBtn {
+        display: none !important;
     }
 
     /* On mobile, when not logged in, display the login button in the navbar */
@@ -682,6 +770,15 @@ html[data-role="user"] #logoutBtn {
         font-size: 13px !important;
         font-weight: 600 !important;
         border-radius: var(--radius-full) !important;
+    }
+
+    /* On mobile before logging in: ONLY keep the login option in the navbar (hide signup button) */
+    #navSignupBtn,
+    .btn-nav-signup,
+    body:not([data-role="developer"]):not([data-role="user"]) #navSignupBtn,
+    body[data-role="unauthenticated"] #navSignupBtn,
+    html[data-role="unauthenticated"] #navSignupBtn {
+        display: none !important;
     }
 }
 
@@ -747,6 +844,67 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     font-weight: 600;
     letter-spacing: 0.02em;
     border-radius: var(--radius-full);
+    border: none;
+    outline: none;
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.55);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-nav-login:hover:not(:disabled),
+.btn-nav-login.is-tapped,
+.btn-nav-login:active:not(:disabled) {
+    transform: translateY(-3.5px);
+    box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7), 0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent);
+}
+
+.btn-nav-signup {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-nav-signup:hover:not(:disabled),
+.btn-nav-signup.is-tapped,
+.btn-nav-signup:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    transform: translateY(-3.5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.btn-nav-account,
+#navAccountBtn {
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+    padding: 7px 10px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.btn-nav-account svg,
+#navAccountBtn svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    stroke-width: 2;
+    display: block;
 }
 
 .btn-logout,
@@ -1112,14 +1270,14 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     color: #000000;
     border: none !important;
     outline: none !important;
-    box-shadow: 0 4px 18px rgba(255, 255, 255, 0.16) !important;
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.55) !important;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-modal-submit:hover:not(:disabled) {
     background: #f4f4f5;
-    box-shadow: 0 6px 26px rgba(255, 255, 255, 0.28);
+    box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7), 0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent) !important;
     transform: translateY(-1px);
 }
 

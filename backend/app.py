@@ -685,6 +685,14 @@ def export_model_checkpoint(req: CheckpointExportRequest):
 # -----------------------------------------------------------------------------
 frontend_dir = os.path.join(BASE_DIR, "frontend")
 if os.path.exists(frontend_dir):
+    @app.get("/signup")
+    async def serve_signup_page():
+        return FileResponse(os.path.join(frontend_dir, "signup.html"))
+
+    @app.get("/login")
+    async def serve_login_page():
+        return FileResponse(os.path.join(frontend_dir, "login.html"))
+
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 if __name__ == "__main__":

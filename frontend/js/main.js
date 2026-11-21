@@ -15,12 +15,14 @@ if (typeof window !== 'undefined') {
 }
 import { initRouter, switchRoute } from './ui/router.js';
 import { initHomeVideo, updateWaveVisibility } from './ui/homeVideo.js?v=6';
+import { initCardTilt } from './ui/tilt.js';
 import { initHomePage } from './pages/home.js';
 import { initStudioPage } from './pages/studio.js?v=3';
 import { initResultsPage, loadAnalytics } from './pages/results.js';
 import { initDeveloperPage } from './pages/developer.js';
 import { initApiPage } from './pages/api.js';
 import { initPaperPage } from './pages/paper.js';
+import { initAccountPage, updateAccountProfile } from './pages/account.js';
 
 async function checkHealth() {
     const backendDot = document.getElementById('backendDot');
@@ -41,28 +43,59 @@ async function checkHealth() {
     }
 }
 
-function initMobileNav() {
-    const navToggle = document.getElementById('navToggle');
+export function syncNavTabsPosition() {
+    const navbar = document.querySelector('.navbar');
+    if (!navbar) return;
+    const navInner = navbar.querySelector('.nav-inner');
     const navTabs = document.querySelector('.nav-tabs');
-    if (!navToggle || !navTabs) return;
+    const navStatus = navInner ? navInner.querySelector('.nav-status') : null;
+    if (!navInner || !navTabs) return;
+
+    if (window.innerWidth <= 1100) {
+        if (navTabs.parentElement !== navbar) {
+            navbar.appendChild(navTabs);
+        }
+    } else {
+        if (navTabs.parentElement !== navInner) {
+            if (navStatus) {
+                navInner.insertBefore(navTabs, navStatus);
+            } else {
+                navInner.appendChild(navTabs);
+            }
+        }
+    }
+}
+
+function initMobileNav() {
+    syncNavTabsPosition();
+    window.addEventListener('resize', syncNavTabsPosition);
+    window.addEventListener('orientationchange', syncNavTabsPosition);
+
+    const navToggle = document.getElementById('navToggle');
+    if (!navToggle) return;
 
     navToggle.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        syncNavTabsPosition();
+        const navTabs = document.querySelector('.nav-tabs');
+        if (!navTabs) return;
         const isOpen = navTabs.classList.toggle('open');
         navToggle.classList.toggle('active', isOpen);
         navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     });
 
-    navTabs.querySelectorAll('.tab-link').forEach(link => {
-        link.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+        const navTabs = document.querySelector('.nav-tabs');
+        if (!navTabs) return;
+
+        if (e.target.closest('.nav-tabs .tab-link')) {
             navTabs.classList.remove('open');
             navToggle.classList.remove('active');
             navToggle.setAttribute('aria-expanded', 'false');
-        });
-    });
+            return;
+        }
 
-    document.addEventListener('click', (e) => {
         if (!e.target.closest('.navbar')) {
             navTabs.classList.remove('open');
             navToggle.classList.remove('active');
@@ -95,24 +128,34 @@ function initVisibilityControls() {
 function initMobileTouchFeedback() {
     if (typeof document === 'undefined') return;
 
-    // Enable CSS :active pseudo-class & smooth tap feedback on mobile devices
+    let touchTimers = new Map();
+
+    // Enable CSS :active & .is-tapped smooth tap feedback on mobile devices
     document.addEventListener('touchstart', (e) => {
-        const card = e.target.closest('.card, .stat-tile, .liquid-glass-strong, .pipeline-step-card, .btn');
-        if (card) {
-            card.classList.add('is-tapped');
+        const btn = e.target.closest('.btn, .btn-primary, .btn-run-inference, .tab-link, .nav-toggle, .btn-nav-login, .btn-nav-signup, #heroSignupBtn, #heroLoginBtn, #heroOpenStudioBtn, #heroReadPaperBtn, #pingBtn, .btn-modal-submit, .btn-modal-cancel, .btn-ctrl, .preset-chip-btn');
+        if (btn) {
+            if (touchTimers.has(btn)) {
+                clearTimeout(touchTimers.get(btn));
+                touchTimers.delete(btn);
+            }
+            btn.classList.add('is-tapped');
         }
     }, { passive: true });
 
     document.addEventListener('touchend', (e) => {
-        const card = e.target.closest('.card, .stat-tile, .liquid-glass-strong, .pipeline-step-card, .btn');
-        if (card) {
-            setTimeout(() => {
-                card.classList.remove('is-tapped');
-            }, 350);
+        const btn = e.target.closest('.btn, .btn-primary, .btn-run-inference, .tab-link, .nav-toggle, .btn-nav-login, .btn-nav-signup, #heroSignupBtn, #heroLoginBtn, #heroOpenStudioBtn, #heroReadPaperBtn, #pingBtn, .btn-modal-submit, .btn-modal-cancel, .btn-ctrl, .preset-chip-btn');
+        if (btn) {
+            const timer = setTimeout(() => {
+                btn.classList.remove('is-tapped');
+                touchTimers.delete(btn);
+            }, 450);
+            touchTimers.set(btn, timer);
         }
     }, { passive: true });
 
     document.addEventListener('touchcancel', () => {
+        touchTimers.forEach(t => clearTimeout(t));
+        touchTimers.clear();
         document.querySelectorAll('.is-tapped').forEach(el => el.classList.remove('is-tapped'));
     }, { passive: true });
 }
@@ -123,6 +166,8 @@ export function boot() {
         updateWaveVisibility();
         if (route === 'analytics') {
             loadAnalytics();
+        } else if (route === 'account') {
+            updateAccountProfile();
         }
     });
 
@@ -133,12 +178,14 @@ export function boot() {
     initDeveloperPage();
     initApiPage();
     initPaperPage();
+    initAccountPage();
 
     // 3. Initialize Shared Navigation & Controls
     initMobileNav();
     initPingButton();
     initVisibilityControls();
     initMobileTouchFeedback();
+    initCardTilt();
 
     // 4. Initialize Background Visual Video
     initHomeVideo('ctaVideo');

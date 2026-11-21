@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/base.css?v=16">
     <link rel="stylesheet" href="css/components.css?v=16">
     <link rel="stylesheet" href="css/pages.css?v=16">
-    <link rel="stylesheet" href="css/portal.css?v=16">
+    <link rel="stylesheet" href="css/portal.css?v=17">
     <script>
         (function() {
             try {
@@ -39,7 +39,7 @@
             input.focus();
         };
     </script>
-    <script type="module" src="js/auth-guard.js?v=8"></script>
+    <script type="module" src="js/auth-guard.js?v=9"></script>
 </head>
 <body>
     <div class="app-shell">
@@ -114,6 +114,13 @@
                     <button class="tab-link" data-route="api">Web API</button>
                     <button class="tab-link" data-route="docs">Docs</button>
                     <button class="tab-link" data-route="paper">Paper</button>
+                    <button type="button" class="tab-link mobile-menu-account" id="mobileMenuAccountLink" data-route="account">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span>Account</span>
+                    </button>
                     <button type="button" class="tab-link mobile-menu-logout" id="mobileMenuLogoutBtn" data-action="logout">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -140,6 +147,20 @@
                         <span>Log In</span>
                     </button>
 
+                    <!-- Nav Sign Up Button (Visible when unauthenticated) -->
+                    <button class="btn btn-sm btn-nav-signup" id="navSignupBtn" title="Create Account" aria-label="Sign Up">
+                        <span>Sign Up</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                    </button>
+
+                    <!-- Account Button (Visible when authenticated) -->
+                    <a href="#/account" class="btn btn-sm btn-icon btn-nav-account" id="navAccountBtn" title="Account Profile & Settings" aria-label="Account">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </a>
+
                     <!-- Logout Button (Visible when authenticated) -->
                     <button class="btn btn-sm btn-logout" id="logoutBtn" title="Sign out" aria-label="Log Out">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -157,6 +178,31 @@
                 </button>
             </div>
         </header>
+        <script>
+            (function() {
+                function syncNavTabs() {
+                    var nb = document.querySelector('.navbar');
+                    if (!nb) return;
+                    var ni = nb.querySelector('.nav-inner');
+                    var nt = document.querySelector('.nav-tabs');
+                    var ns = ni ? ni.querySelector('.nav-status') : null;
+                    if (!ni || !nt) return;
+                    if (window.innerWidth <= 1100) {
+                        if (nt.parentElement !== nb) {
+                            nb.appendChild(nt);
+                        }
+                    } else {
+                        if (nt.parentElement !== ni) {
+                            if (ns) ni.insertBefore(nt, ns);
+                            else ni.appendChild(nt);
+                        }
+                    }
+                }
+                syncNavTabs();
+                window.addEventListener('resize', syncNavTabs);
+                window.addEventListener('orientationchange', syncNavTabs);
+            })();
+        </script>
 
         <!-- MAIN VIEWPORT CONTAINER -->
         <main class="main-viewport">
@@ -176,6 +222,11 @@
                             <button type="button" class="btn btn-hero" id="heroLoginBtn">
                                 <span>Log In</span>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                            </button>
+                            <!-- Sign up button on landing page (Visible when unauthenticated) -->
+                            <button type="button" class="btn btn-primary btn-hero" id="heroSignupBtn">
+                                <span>Sign up</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
                             </button>
                             <!-- Open Studio button (Displayed when authenticated as Developer or User) -->
                             <a href="#/predict" class="btn btn-hero" id="heroOpenStudioBtn">
@@ -1733,6 +1784,162 @@
                         </ul>
                     </div>
                 </section>
+
+                <!-- ============================================================== -->
+                <!-- PAGE 8: /account (ACCOUNT PROFILE & PREFERENCES)                -->
+                <!-- ============================================================== -->
+                <section class="view-page" id="pageAccount">
+                    <div class="page-header">
+                        <h1 class="page-title">Account Profile &amp; Settings</h1>
+                        <p class="page-desc">Manage authenticated identity, session security credentials, role entitlements, and neural inference telemetry.</p>
+                    </div>
+
+                    <!-- PROFILE HERO CARD -->
+                    <div class="card account-profile-card">
+                        <div class="account-profile-main">
+                            <div class="account-avatar-wrapper">
+                                <div class="account-avatar" id="accountAvatarInitial">D</div>
+                                <div class="account-status-ring online" title="Session Active"></div>
+                            </div>
+                            <div class="account-identity">
+                                <div class="account-role-row">
+                                    <h2 class="account-name" id="accountDisplayName">Developer Account</h2>
+                                    <span class="badge badge-dev" id="accountRoleBadge">Developer (Full Access)</span>
+                                </div>
+                                <div class="account-handle" id="accountUsernameTag">@developer</div>
+                                <div class="account-meta-row">
+                                    <span class="account-meta-item">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                        Session: <strong id="accountSessionStarted">Active Now</strong>
+                                    </span>
+                                    <span class="account-meta-item">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                        Platform: <span id="accountPlatform">Linux &bull; Neural Web Engine</span>
+                                    </span>
+                                    <span class="account-meta-item">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                        Auth: <span>Demo Vault (Local Session)</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="account-actions-row">
+                            <a href="#/predict" class="btn btn-primary">
+                                <span>Open Studio</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                            </a>
+                            <a href="#/api" class="btn btn-ctrl-account" id="accountApiKeysLink">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5M19 5l-7 7-1.5-1.5M5 16l-3 3 1 1 2-2 1 1 2-2-1-1 3-3"></path><circle cx="16.5" cy="7.5" r="4.5"></circle></svg>
+                                <span>API Keys</span>
+                            </a>
+                            <button type="button" class="btn btn-logout" id="accountLogoutBtn">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                                <span>Sign Out</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STATS TILES -->
+                    <div class="grid-4 account-stats-grid">
+                        <div class="stat-tile">
+                            <div class="stat-number" id="accountStatRole">DEV</div>
+                            <div class="stat-label">Access Tier</div>
+                            <div class="stat-sub" id="accountStatRoleSub">Full DSP &amp; Checkpoints</div>
+                        </div>
+                        <div class="stat-tile">
+                            <div class="stat-number">16 kHz</div>
+                            <div class="stat-label">Model Resolution</div>
+                            <div class="stat-sub">128,000 Mono Samples (8.0s)</div>
+                        </div>
+                        <div class="stat-tile">
+                            <div class="stat-number"><em>K</em> = 1..32</div>
+                            <div class="stat-label">Source Count Capacity</div>
+                            <div class="stat-sub">WavLM-Base+ Regression</div>
+                        </div>
+                        <div class="stat-tile">
+                            <div class="stat-number">15</div>
+                            <div class="stat-label">Multi-Label Classes</div>
+                            <div class="stat-sub">Joint Polyphonic Tagging</div>
+                        </div>
+                    </div>
+
+                    <!-- WORKSPACE PERMISSIONS & SECURITY CARDS -->
+                    <div class="grid-2 account-details-grid">
+                        <!-- ENTITLEMENTS CARD -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">Granted Workspace Entitlements</h2>
+                                <span class="badge">Active</span>
+                            </div>
+                            <div class="account-entitlements-list">
+                                <div class="account-entitlement-item">
+                                    <div class="entitlement-status-dot online"></div>
+                                    <div class="entitlement-info">
+                                        <div class="entitlement-name">Source Counting (Task 1)</div>
+                                        <div class="entitlement-desc">Continuous polyphonic regression for active emitter density up to K=32.</div>
+                                    </div>
+                                </div>
+                                <div class="account-entitlement-item">
+                                    <div class="entitlement-status-dot online"></div>
+                                    <div class="entitlement-info">
+                                        <div class="entitlement-name">Multi-Label Tagging (Task 2)</div>
+                                        <div class="entitlement-desc">15-class audio event classification with confidence score evaluation.</div>
+                                    </div>
+                                </div>
+                                <div class="account-entitlement-item">
+                                    <div class="entitlement-status-dot online"></div>
+                                    <div class="entitlement-info">
+                                        <div class="entitlement-name">Speech Separation (Task 3)</div>
+                                        <div class="entitlement-desc">Clean speech extraction with interactive 4-stem multitrack visualizer.</div>
+                                    </div>
+                                </div>
+                                <div class="account-entitlement-item" id="accountEntitlementDevOnly">
+                                    <div class="entitlement-status-dot online"></div>
+                                    <div class="entitlement-info">
+                                        <div class="entitlement-name">Developer Checkpoint Inspection</div>
+                                        <div class="entitlement-desc">Full access to Table 3 model weights, dataset partitions, and analytics ceiling.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SESSION SECURITY & ENVIRONMENT CARD -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">Session Security &amp; Environment</h2>
+                                <span class="badge">Local Vault</span>
+                            </div>
+                            <table class="data-table account-security-table">
+                                <tr>
+                                    <td class="label">Session Storage</td>
+                                    <td class="val">Isolated Client SessionStorage</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">API Security Guard</td>
+                                    <td class="val">Bearer Token / Role Token Header</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">DSP Backend</td>
+                                    <td class="val">Uvicorn / FastAPI Neural Inference Engine</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Audio Engine</td>
+                                    <td class="val">Web Audio API (Float32Array &bull; 16000 Hz)</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Session Timeout</td>
+                                    <td class="val">Persistent until browser close or manual sign out</td>
+                                </tr>
+                            </table>
+                            <div class="account-security-footer">
+                                <button type="button" class="btn btn-ctrl btn-full" id="accountClearSessionBtn">
+                                    <span>Reset Workspace Session Cache</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </main>
 
@@ -1872,17 +2079,7 @@
             <!-- VIEW 2: CREATE USER ACCOUNT VIEW -->
             <div class="modal-view" id="modalSignupView" style="display: none;">
                 <h2 class="modal-title">Create User Account</h2>
-                <p class="modal-subtitle">Register for a <strong>User Account</strong> to access the Inference Studio. Developer accounts cannot be created here.</p>
-
-                <!-- USER-ONLY RESTRICTION NOTICE -->
-                <div class="modal-role-notice">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                    <span><strong>User Account:</strong> Grants access to the Neural Machine Listening &amp; Speech Separation Studio. Developer accounts (full suite, training &amp; checkpoints) are restricted and cannot be registered here.</span>
-                </div>
+                <p class="modal-subtitle">Register for a <strong>User Account</strong> to access the Inference Studio.</p>
 
                 <form class="modal-login-form" id="modalSignupForm" autocomplete="on">
                     <div class="auth-field">

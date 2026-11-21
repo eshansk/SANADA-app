@@ -9,6 +9,8 @@
 // DEMO CREDENTIALS CONFIGURATION
 // NOTE: Front-end demo authentication. Replace with backend auth in production.
 // =============================================================================
+import { initCardTilt } from './ui/tilt.js';
+
 export const DEMO_CONFIG = {
     developer: {
         username: 'developer',
@@ -51,17 +53,6 @@ export function initLoginPage() {
     // Reset error when user types
     usernameInput.addEventListener('input', hideError);
     passwordInput.addEventListener('input', hideError);
-
-    // New User helper link
-    if (newUserLink) {
-        newUserLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            usernameInput.value = DEMO_CONFIG.user.username;
-            passwordInput.value = DEMO_CONFIG.user.password;
-            hideError();
-            usernameInput.focus();
-        });
-    }
 
     loginForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -110,8 +101,25 @@ export function initLoginPage() {
     });
 }
 
+function initMobileTouchFeedback() {
+    if (typeof document === 'undefined') return;
+    document.addEventListener('touchstart', (e) => {
+        const btn = e.target.closest('.btn, .btn-modal-submit, .auth-link, .portal-switch-link');
+        if (btn) btn.classList.add('is-tapped');
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+        const btn = e.target.closest('.btn, .btn-modal-submit, .auth-link, .portal-switch-link');
+        if (btn) setTimeout(() => btn.classList.remove('is-tapped'), 450);
+    }, { passive: true });
+    document.addEventListener('touchcancel', () => {
+        document.querySelectorAll('.is-tapped').forEach(el => el.classList.remove('is-tapped'));
+    }, { passive: true });
+}
+
 // Auto-initialize when DOM is ready
 if (typeof window !== 'undefined') {
+    initCardTilt();
+    initMobileTouchFeedback();
     if (document.readyState === 'loading') {
         window.addEventListener('DOMContentLoaded', initLoginPage);
     } else {

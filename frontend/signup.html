@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" data-role="unauthenticated">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sign up for a SANADA User Account to access the Neural Machine Listening & Speech Separation Studio.">
+    <title>SANADA | Create User Account</title>
+
+    <!-- GOOGLE FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+
+    <!-- STYLESHEETS -->
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/portal.css?v=17">
+
+    <!-- GLOBAL PASSWORD TOGGLE HELPER -->
+    <script>
+        window.togglePasswordVisibility = function(inputId, btnEl) {
+            var input = document.getElementById(inputId);
+            if (!input) return;
+            var isPass = input.type === 'password';
+            input.type = isPass ? 'text' : 'password';
+            if (btnEl) {
+                var showEye = btnEl.querySelector('.eye-show');
+                var hideEye = btnEl.querySelector('.eye-hide');
+                if (showEye) showEye.style.display = isPass ? 'none' : 'block';
+                if (hideEye) hideEye.style.display = isPass ? 'block' : 'none';
+            }
+            input.focus();
+        };
+    </script>
+    <script type="module" src="js/auth-guard.js?v=9"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <!-- FIXED CINEMATIC WAVE BACKGROUND -->
+        <div class="home-fixed-wave-bg" id="homeWaveBg" aria-hidden="true">
+            <video id="ctaVideo" crossorigin="anonymous" autoplay loop muted playsinline class="cta-video">
+                <source src="assets/wave_bg.mp4?v=6" type="video/mp4">
+            </video>
+            <script>
+                (function() {
+                    var v = document.getElementById('ctaVideo');
+                    if (v) { v.defaultPlaybackRate = 0.80; v.playbackRate = 0.80; }
+                })();
+            </script>
+            <div class="home-wave-overlay"></div>
+        </div>
+
+        <!-- VISIBLE AMBIENT BACKDROP -->
+        <div class="ambient-backdrop" id="ambientBackdrop" aria-hidden="true">
+            <div class="ambient-blob blob-1"></div>
+            <div class="ambient-blob blob-2"></div>
+            <div class="ambient-blob blob-3"></div>
+            <div class="ambient-blob blob-4"></div>
+            <svg class="ambient-ribbons" viewBox="0 0 1440 900" fill="none" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="ribbonGrad1" x1="0%" y1="0%" x2="100%" y2="80%">
+                        <stop offset="0%" stop-color="var(--wave-light)" stop-opacity="0.35"/>
+                        <stop offset="45%" stop-color="var(--wave-2)" stop-opacity="0.22"/>
+                        <stop offset="85%" stop-color="var(--wave-1)" stop-opacity="0.10"/>
+                        <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="ribbonGrad2" x1="100%" y1="10%" x2="0%" y2="90%">
+                        <stop offset="0%" stop-color="var(--wave-2)" stop-opacity="0.28"/>
+                        <stop offset="50%" stop-color="var(--wave-3)" stop-opacity="0.18"/>
+                        <stop offset="85%" stop-color="var(--wave-1)" stop-opacity="0.08"/>
+                        <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <path class="ribbon-path ribbon-1" d="M -100 280 C 260 120, 520 460, 880 260 C 1180 90, 1380 320, 1600 240" stroke="url(#ribbonGrad1)" stroke-width="2.5"/>
+                <path class="ribbon-path ribbon-2" d="M -100 440 C 320 280, 600 620, 960 400 C 1240 220, 1420 480, 1600 380" stroke="url(#ribbonGrad2)" stroke-width="2"/>
+            </svg>
+        </div>
+
+        <!-- CREATE ACCOUNT POPUP MODAL (OPEN BY DEFAULT ON SIGNUP PAGE) -->
+        <div class="auth-modal open" id="sanadaAuthModal" aria-hidden="false" role="dialog" aria-modal="true" aria-labelledby="modalSignupTitle">
+            <div class="auth-modal-card">
+                <!-- Close Button (Navigates to index.html on standalone page) -->
+                <button type="button" class="auth-modal-close" id="modalCloseBtn" aria-label="Close Signup Modal" title="Close (Esc)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+
+                <!-- Error Notice -->
+                <div class="modal-auth-error" id="modalAuthError" role="alert" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span id="modalAuthErrorText">Invalid credentials.</span>
+                </div>
+
+                <!-- Success Notice -->
+                <div class="modal-auth-success" id="modalAuthSuccess" role="status" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <span id="modalAuthSuccessText">Verification code sent!</span>
+                </div>
+
+                <!-- VIEW 1: SIGN IN VIEW (Hidden by default on signup page) -->
+                <div class="modal-view" id="modalSigninView" style="display: none;">
+                    <h2 class="modal-title" id="modalAuthTitle">Sign In</h2>
+                    <p class="modal-subtitle">Choose your access role to continue.</p>
+
+                    <div class="modal-role-selector" role="tablist" aria-label="Select Login Role">
+                        <button type="button" class="role-select-card" id="modalRoleDevBtn" role="tab" aria-selected="false" data-role="developer">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                            </svg>
+                            <span>Developer</span>
+                        </button>
+                        <button type="button" class="role-select-card active" id="modalRoleUserBtn" role="tab" aria-selected="true" data-role="user">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+                                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+                            </svg>
+                            <span>User</span>
+                        </button>
+                    </div>
+
+                    <form class="modal-login-form" id="modalLoginForm" autocomplete="on">
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalUsernameInput" id="modalUsernameLabel">Username</label>
+                            <input type="text" id="modalUsernameInput" name="username" class="auth-input" placeholder="Enter username" autocomplete="username" required>
+                        </div>
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalPasswordInput">Password</label>
+                            <div class="modal-pass-wrap">
+                                <input type="password" id="modalPasswordInput" name="password" class="auth-input" placeholder="Enter password" autocomplete="current-password" required>
+                                <button type="button" class="modal-pass-toggle" id="modalPassToggle" aria-label="Toggle password visibility" title="Show/Hide password" onclick="window.togglePasswordVisibility('modalPasswordInput', this)">
+                                    <svg class="eye-show" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <svg class="eye-hide" style="display: none;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="modal-actions-group">
+                            <button type="submit" class="btn btn-primary btn-modal-submit" id="modalSubmitBtn">
+                                <span>Log In as User</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="modal-auth-footer">
+                        <span class="auth-modal-footer-text">Don't have an account?</span>
+                        <button type="button" class="auth-link-btn" id="modalSwitchToSignupBtn">Create Account</button>
+                    </div>
+                </div>
+
+                <!-- VIEW 2: CREATE USER ACCOUNT VIEW (Active by default on signup page) -->
+                <div class="modal-view active" id="modalSignupView" style="display: block;">
+                    <h2 class="modal-title" id="modalSignupTitle">Create User Account</h2>
+                    <p class="modal-subtitle">Register for a <strong>User Account</strong> to access the Inference Studio.</p>
+
+                    <form class="modal-login-form" id="modalSignupForm" autocomplete="on">
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalSignupUsernameInput">Username</label>
+                            <input
+                                type="text"
+                                id="modalSignupUsernameInput"
+                                name="reg_username"
+                                class="auth-input"
+                                placeholder="Choose a username"
+                                value=""
+                                autocomplete="username"
+                                required
+                            >
+                        </div>
+
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalSignupEmailInput">Email ID</label>
+                            <input
+                                type="email"
+                                id="modalSignupEmailInput"
+                                name="reg_email"
+                                class="auth-input"
+                                placeholder="Enter your email address"
+                                value=""
+                                autocomplete="email"
+                                required
+                            >
+                        </div>
+
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalSignupPasswordInput">Password</label>
+                            <div class="modal-pass-wrap">
+                                <input
+                                    type="password"
+                                    id="modalSignupPasswordInput"
+                                    name="reg_password"
+                                    class="auth-input"
+                                    placeholder="Create a password (min 6 chars)"
+                                    value=""
+                                    autocomplete="new-password"
+                                    required
+                                >
+                                <button
+                                    type="button"
+                                    class="modal-pass-toggle"
+                                    id="modalSignupPassToggle"
+                                    aria-label="Toggle password visibility"
+                                    title="Show/Hide password"
+                                    onclick="window.togglePasswordVisibility('modalSignupPasswordInput', this)"
+                                >
+                                    <svg class="eye-show" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                    <svg class="eye-hide" style="display: none;" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions-group">
+                            <button type="submit" class="btn btn-primary btn-modal-submit" id="modalSignupSubmitBtn">
+                                <span>Send Verification Code (User)</span>
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="modal-auth-footer">
+                        <span class="auth-modal-footer-text">Already have an account?</span>
+                        <a href="login.html" class="auth-link-btn" id="modalSwitchToSigninBtn">Sign In</a>
+                    </div>
+                </div>
+
+                <!-- VIEW 3: OTP EMAIL VERIFICATION VIEW -->
+                <div class="modal-view" id="modalOtpView" style="display: none;">
+                    <h2 class="modal-title">Verify Email</h2>
+                    <p class="modal-subtitle">Enter the 6-digit code sent to <strong id="modalOtpTargetEmail" style="color: #ffffff; font-weight: 500;">your email</strong>.</p>
+
+                    <form class="modal-login-form" id="modalOtpForm" autocomplete="off">
+                        <div class="auth-field">
+                            <label class="auth-label" for="modalOtpInput">Verification Code (OTP)</label>
+                            <input
+                                type="text"
+                                id="modalOtpInput"
+                                name="otp"
+                                class="auth-input modal-otp-input"
+                                placeholder="000000"
+                                maxlength="8"
+                                inputmode="numeric"
+                                autocomplete="one-time-code"
+                                required
+                            >
+                        </div>
+
+                        <div class="modal-actions-group">
+                            <button type="submit" class="btn btn-primary btn-modal-submit" id="modalOtpSubmitBtn">
+                                <span>Verify &amp; Create Account</span>
+                            </button>
+                        </div>
+
+                        <div class="modal-otp-actions">
+                            <button type="button" class="auth-link-btn" id="modalOtpResendBtn">Resend Code</button>
+                            <button type="button" class="auth-link-btn" id="modalOtpBackBtn">&larr; Edit Details</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

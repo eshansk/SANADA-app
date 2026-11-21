@@ -109,6 +109,30 @@ export function applyRoleDisplay(role) {
             document.body.dataset.role = activeRole;
         }
 
+        // Synchronize auth buttons across navbar and hero
+        const heroSignupBtn = document.getElementById('heroSignupBtn');
+        const navSignupBtn = document.getElementById('navSignupBtn');
+        const heroLoginBtn = document.getElementById('heroLoginBtn');
+        const navLoginBtn = document.getElementById('navLoginBtn');
+        const navAccountBtn = document.getElementById('navAccountBtn');
+        const mobileMenuAccountLink = document.getElementById('mobileMenuAccountLink');
+
+        if (activeRole === 'developer' || activeRole === 'user') {
+            if (heroSignupBtn) heroSignupBtn.style.display = 'none';
+            if (navSignupBtn) navSignupBtn.style.display = 'none';
+            if (heroLoginBtn) heroLoginBtn.style.display = 'none';
+            if (navLoginBtn) navLoginBtn.style.display = 'none';
+            if (navAccountBtn) navAccountBtn.style.display = 'inline-flex';
+            if (mobileMenuAccountLink) mobileMenuAccountLink.style.display = '';
+        } else {
+            if (heroSignupBtn) heroSignupBtn.style.display = '';
+            if (navSignupBtn) navSignupBtn.style.display = '';
+            if (heroLoginBtn) heroLoginBtn.style.display = '';
+            if (navLoginBtn) navLoginBtn.style.display = '';
+            if (navAccountBtn) navAccountBtn.style.display = 'none';
+            if (mobileMenuAccountLink) mobileMenuAccountLink.style.display = 'none';
+        }
+
         // Trigger custom role event for SPA router
         window.dispatchEvent(new CustomEvent('sanada:roleChanged', { detail: { role: activeRole } }));
     }
@@ -217,7 +241,37 @@ export function openAuthModal(preferredRole) {
     }, 50);
 }
 
+export function openSignupModal() {
+    const modal = document.getElementById('sanadaAuthModal');
+    if (!modal) return;
+
+    setModalActiveRole('user');
+    switchModalView('signup');
+
+    // Keep fields empty when opening
+    const regUsernameInput = document.getElementById('modalSignupUsernameInput');
+    const regEmailInput = document.getElementById('modalSignupEmailInput');
+    const regPasswordInput = document.getElementById('modalSignupPasswordInput');
+    if (regUsernameInput) regUsernameInput.value = '';
+    if (regEmailInput) regEmailInput.value = '';
+    if (regPasswordInput) regPasswordInput.value = '';
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    document.body.style.overflow = 'hidden';
+
+    setTimeout(() => {
+        regUsernameInput?.focus();
+    }, 50);
+}
+
 export function closeAuthModal() {
+    if (window.location.pathname.endsWith('signup.html')) {
+        window.location.href = 'index.html';
+        return;
+    }
+
     const modal = document.getElementById('sanadaAuthModal');
     if (!modal) return;
 
@@ -422,6 +476,15 @@ function initAuthGuard() {
         });
     }
 
+    // Hero Signup button (Opens Create Account popup)
+    const heroSignupBtn = document.getElementById('heroSignupBtn');
+    if (heroSignupBtn) {
+        heroSignupBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openSignupModal();
+        });
+    }
+
     // Top Navbar Login button
     const navLoginBtn = document.getElementById('navLoginBtn');
     if (navLoginBtn) {
@@ -429,6 +492,24 @@ function initAuthGuard() {
             e.preventDefault();
             openAuthModal('developer');
         });
+    }
+
+    // Top Navbar Signup button
+    const navSignupBtn = document.getElementById('navSignupBtn');
+    if (navSignupBtn) {
+        navSignupBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openSignupModal();
+        });
+    }
+
+    // Auto-open signup modal on standalone signup page or #/signup hash
+    if (
+        window.location.pathname.endsWith('signup.html') ||
+        window.location.hash === '#/signup' ||
+        window.location.search.includes('signup')
+    ) {
+        openSignupModal();
     }
 
     // Logout buttons: ask confirmation before logging out
@@ -567,8 +648,12 @@ function initAuthGuard() {
 
     const switchToSigninBtn = document.getElementById('modalSwitchToSigninBtn');
     switchToSigninBtn?.addEventListener('click', (e) => {
-        e.preventDefault();
-        switchModalView('signin');
+        if (window.location.pathname.endsWith('signup.html')) {
+            window.location.href = 'login.html';
+        } else {
+            e.preventDefault();
+            switchModalView('signin');
+        }
     });
 
     const otpBackBtn = document.getElementById('modalOtpBackBtn');
@@ -746,7 +831,7 @@ function initAuthGuard() {
                 // Clear pending signup data
                 pendingSignup = { username: '', email: '', password: '' };
 
-                if (window.location.pathname.endsWith('login.html')) {
+                if (window.location.pathname.endsWith('login.html') || window.location.pathname.endsWith('signup.html')) {
                     window.location.href = 'index.html';
                 }
             } catch (err) {
@@ -770,6 +855,7 @@ if (typeof window !== 'undefined') {
         clearAuth,
         applyRoleDisplay,
         openAuthModal,
+        openSignupModal,
         closeAuthModal,
         switchModalView,
         openLogoutModal,
@@ -781,6 +867,7 @@ if (typeof window !== 'undefined') {
     };
     window.logout = logout;
     window.openAuthModal = openAuthModal;
+    window.openSignupModal = openSignupModal;
     window.closeAuthModal = closeAuthModal;
     window.switchModalView = switchModalView;
     window.openLogoutModal = openLogoutModal;
