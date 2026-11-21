@@ -54,9 +54,9 @@
     body {
         background-color: var(--wave-deep);
         background-image:
-            radial-gradient(120% 80% at var(--bg-x1, 15%) var(--bg-y1, -10%), color-mix(in srgb, var(--wave-1) 22%, transparent) 0%, transparent 60%),
-            radial-gradient(100% 70% at var(--bg-x2, 90%) var(--bg-y2, 10%), color-mix(in srgb, var(--wave-2) 18%, transparent) 0%, transparent 55%),
-            radial-gradient(90% 60% at var(--bg-x3, 50%) var(--bg-y3, 110%), color-mix(in srgb, var(--wave-3) 20%, transparent) 0%, transparent 60%);
+            radial-gradient(120% 80% at var(--bg-x1, 15%) var(--bg-y1, -10%), color-mix(in srgb, var(--wave-1) 20%, transparent) 0%, transparent 60%),
+            radial-gradient(100% 70% at var(--bg-x2, 90%) var(--bg-y2, 10%), color-mix(in srgb, var(--wave-2) 15%, transparent) 0%, transparent 55%),
+            radial-gradient(90% 60% at var(--bg-x3, 50%) var(--bg-y3, 110%), color-mix(in srgb, var(--wave-3) 16%, transparent) 0%, transparent 60%);
         background-attachment: fixed;
         color: var(--text-primary);
         font-family: var(--font-body);
@@ -82,13 +82,13 @@
         visibility: visible;
     }
 
-    /* 2. ANIMATED BLOBS (Pure translation drift without scaling to guarantee constant brightness) */
+    /* 2. ANIMATED BLOBS (Organic luminous drift without screen-bleaching) */
     .ambient-blob {
         position: absolute;
         border-radius: 50%;
-        filter: blur(100px);
-        -webkit-filter: blur(100px);
-        mix-blend-mode: screen;
+        filter: blur(90px);
+        -webkit-filter: blur(90px);
+        opacity: 0.28;
         will-change: transform;
         pointer-events: none;
     }
@@ -96,8 +96,7 @@
     .ambient-blob.blob-1 {
         width: 72vmax;
         height: 72vmax;
-        background: radial-gradient(circle, var(--wave-1) 0%, transparent 70%);
-        opacity: 0.34;
+        background: radial-gradient(circle, color-mix(in srgb, var(--wave-1) 85%, transparent) 0%, transparent 70%);
         top: -18vmax;
         left: -12vmax;
         animation: driftBlob1 24s ease-in-out infinite alternate;
@@ -106,8 +105,7 @@
     .ambient-blob.blob-2 {
         width: 68vmax;
         height: 68vmax;
-        background: radial-gradient(circle, var(--wave-2) 0%, transparent 70%);
-        opacity: 0.30;
+        background: radial-gradient(circle, color-mix(in srgb, var(--wave-2) 80%, transparent) 0%, transparent 70%);
         top: 8vmax;
         right: -15vmax;
         animation: driftBlob2 28s ease-in-out infinite alternate;
@@ -116,8 +114,7 @@
     .ambient-blob.blob-3 {
         width: 76vmax;
         height: 76vmax;
-        background: radial-gradient(circle, var(--wave-3) 0%, transparent 70%);
-        opacity: 0.26;
+        background: radial-gradient(circle, color-mix(in srgb, var(--wave-3) 75%, transparent) 0%, transparent 70%);
         bottom: -22vmax;
         left: 15%;
         animation: driftBlob3 22s ease-in-out infinite alternate;
@@ -126,8 +123,7 @@
     .ambient-blob.blob-4 {
         width: 62vmax;
         height: 62vmax;
-        background: radial-gradient(circle, var(--wave-1) 0%, transparent 70%);
-        opacity: 0.28;
+        background: radial-gradient(circle, color-mix(in srgb, var(--wave-1) 80%, transparent) 0%, transparent 70%);
         top: 35%;
         left: 40%;
         animation: driftBlob4 26s ease-in-out infinite alternate;

@@ -11,28 +11,28 @@
 @layer tokens {
     :root {
         /* ---------------------------------------------------------------------
-           WAVE VIDEO PALETTE (Extracted from 9 still frames across the video)
+           WAVE VIDEO PALETTE (Enriched Chromatic Spectrum)
            --------------------------------------------------------------------- */
-        /* Darkest video tone, lightened to ~6.5% lightness. Page base, visibly tinted, NOT black */
-        --wave-deep: hsl(268 30% 6.5%);
+        /* Deep obsidian-violet page base. Rich dark void with chromatic tint */
+        --wave-deep: hsl(268 45% 2.8%);
 
-        /* Dominant mid tone (main glow color): rich glowing violet #735cb3 */
-        --wave-1: hsl(256 42% 56%);
+        /* Dominant mid tone (main glow color): saturated electric violet */
+        --wave-1: hsl(258 72% 60%);
 
-        /* Secondary tone: luminous lavender #af90d0 */
-        --wave-2: hsl(270 42% 70%);
+        /* Secondary tone: vibrant luminous lavender */
+        --wave-2: hsl(274 66% 68%);
 
-        /* Tertiary/warm counter tone from video crests: soft orchid/rose #d896c5 (use sparingly) */
-        --wave-3: hsl(315 44% 68%);
+        /* Tertiary tone: rich radiant orchid/rose */
+        --wave-3: hsl(315 70% 64%);
 
-        /* Brightest highlight: iridescent wave crest #fdeaf4 (text gradients, active states, focus rings) */
-        --wave-light: hsl(325 78% 91%);
+        /* Brightest highlight: iridescent wave crest with soft rose/violet undertone */
+        --wave-light: hsl(320 85% 88%);
 
-        /* 3 Clear Surface Levels (Visibly tinted, clearly distinct) */
-        --bg-0: var(--wave-deep);                         /* ~6.5% lightness */
-        --bg-1: hsl(268 25% 10%);                         /* ~10% lightness: sections & cards */
-        --bg-2: hsl(268 22% 14.5%);                       /* ~14.5% lightness: raised surfaces, inputs, terminal */
-        --bg-hover: hsl(268 26% 18%);                     /* interactive hover overlay */
+        /* 3 Clear Surface Levels (Richly tinted, high contrast) */
+        --bg-0: var(--wave-deep);                         /* ~2.8% lightness */
+        --bg-1: hsl(268 35% 6.5%);                        /* ~6.5% lightness: sections & cards */
+        --bg-2: hsl(268 28% 10.5%);                       /* ~10.5% lightness: raised surfaces, inputs, terminal */
+        --bg-hover: hsl(268 30% 14%);                     /* interactive hover overlay */
 
         /* Backward-compatible background aliases */
         --bg-base: var(--bg-0);
