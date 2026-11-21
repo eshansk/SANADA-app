@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 import { initRouter, switchRoute } from './ui/router.js';
 import { initHomeVideo, updateWaveVisibility } from './ui/homeVideo.js?v=6';
 import { initHomePage } from './pages/home.js';
-import { initStudioPage } from './pages/studio.js';
+import { initStudioPage } from './pages/studio.js?v=3';
 import { initResultsPage, loadAnalytics } from './pages/results.js';
 import { initDeveloperPage } from './pages/developer.js';
 import { initApiPage } from './pages/api.js';
@@ -92,6 +92,31 @@ function initVisibilityControls() {
     });
 }
 
+function initMobileTouchFeedback() {
+    if (typeof document === 'undefined') return;
+
+    // Enable CSS :active pseudo-class & smooth tap feedback on mobile devices
+    document.addEventListener('touchstart', (e) => {
+        const card = e.target.closest('.card, .stat-tile, .liquid-glass-strong, .pipeline-step-card, .btn');
+        if (card) {
+            card.classList.add('is-tapped');
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        const card = e.target.closest('.card, .stat-tile, .liquid-glass-strong, .pipeline-step-card, .btn');
+        if (card) {
+            setTimeout(() => {
+                card.classList.remove('is-tapped');
+            }, 350);
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', () => {
+        document.querySelectorAll('.is-tapped').forEach(el => el.classList.remove('is-tapped'));
+    }, { passive: true });
+}
+
 export function boot() {
     // 1. Initialize Single-Page Router & sync route changes
     initRouter((route) => {
@@ -113,6 +138,7 @@ export function boot() {
     initMobileNav();
     initPingButton();
     initVisibilityControls();
+    initMobileTouchFeedback();
 
     // 4. Initialize Background Visual Video
     initHomeVideo('ctaVideo');

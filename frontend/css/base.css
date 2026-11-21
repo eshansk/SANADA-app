@@ -88,7 +88,7 @@
         border-radius: 50%;
         filter: blur(90px);
         -webkit-filter: blur(90px);
-        opacity: 0.28;
+        opacity: 0.46;
         will-change: transform;
         pointer-events: none;
     }
@@ -99,7 +99,7 @@
         background: radial-gradient(circle, color-mix(in srgb, var(--wave-1) 85%, transparent) 0%, transparent 70%);
         top: -18vmax;
         left: -12vmax;
-        animation: driftBlob1 24s ease-in-out infinite alternate;
+        animation: driftBlob1 9s cubic-bezier(0.42, 0, 0.58, 1) infinite;
     }
 
     .ambient-blob.blob-2 {
@@ -108,7 +108,7 @@
         background: radial-gradient(circle, color-mix(in srgb, var(--wave-2) 80%, transparent) 0%, transparent 70%);
         top: 8vmax;
         right: -15vmax;
-        animation: driftBlob2 28s ease-in-out infinite alternate;
+        animation: driftBlob2 11s cubic-bezier(0.42, 0, 0.58, 1) infinite;
     }
 
     .ambient-blob.blob-3 {
@@ -117,7 +117,7 @@
         background: radial-gradient(circle, color-mix(in srgb, var(--wave-3) 75%, transparent) 0%, transparent 70%);
         bottom: -22vmax;
         left: 15%;
-        animation: driftBlob3 22s ease-in-out infinite alternate;
+        animation: driftBlob3 8.5s cubic-bezier(0.42, 0, 0.58, 1) infinite;
     }
 
     .ambient-blob.blob-4 {
@@ -126,32 +126,113 @@
         background: radial-gradient(circle, color-mix(in srgb, var(--wave-1) 80%, transparent) 0%, transparent 70%);
         top: 35%;
         left: 40%;
-        animation: driftBlob4 26s ease-in-out infinite alternate;
+        animation: driftBlob4 10s cubic-bezier(0.42, 0, 0.58, 1) infinite;
     }
 
-    /* Constant-luminance drift: pure translate3d translation (NO scaling/breathing) */
+    /* Dynamic multi-axis orbital drift: continuous fluid loops across 2D plane */
     @keyframes driftBlob1 {
-        0%   { transform: translate3d(0, 0, 0); }
-        50%  { transform: translate3d(16vw, 12vh, 0); }
-        100% { transform: translate3d(-10vw, 18vh, 0); }
+        0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+        25%  { transform: translate3d(16vw, 18vh, 0) rotate(25deg); }
+        50%  { transform: translate3d(4vw, 32vh, 0) rotate(-15deg); }
+        75%  { transform: translate3d(-18vw, 14vh, 0) rotate(30deg); }
+        100% { transform: translate3d(0, 0, 0) rotate(0deg); }
     }
 
     @keyframes driftBlob2 {
-        0%   { transform: translate3d(0, 0, 0); }
-        50%  { transform: translate3d(-18vw, 10vh, 0); }
-        100% { transform: translate3d(-8vw, -14vh, 0); }
+        0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+        25%  { transform: translate3d(-18vw, 20vh, 0) rotate(-30deg); }
+        50%  { transform: translate3d(-26vw, -12vh, 0) rotate(20deg); }
+        75%  { transform: translate3d(-8vw, -24vh, 0) rotate(-15deg); }
+        100% { transform: translate3d(0, 0, 0) rotate(0deg); }
     }
 
     @keyframes driftBlob3 {
-        0%   { transform: translate3d(0, 0, 0); }
-        50%  { transform: translate3d(14vw, -16vh, 0); }
-        100% { transform: translate3d(-14vw, -8vh, 0); }
+        0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+        25%  { transform: translate3d(18vw, -22vh, 0) rotate(35deg); }
+        50%  { transform: translate3d(-14vw, -28vh, 0) rotate(-25deg); }
+        75%  { transform: translate3d(-24vw, 10vh, 0) rotate(15deg); }
+        100% { transform: translate3d(0, 0, 0) rotate(0deg); }
     }
 
     @keyframes driftBlob4 {
-        0%   { transform: translate3d(0, 0, 0); }
-        50%  { transform: translate3d(-14vw, 16vh, 0); }
-        100% { transform: translate3d(12vw, -10vh, 0); }
+        0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+        25%  { transform: translate3d(-20vw, -16vh, 0) rotate(-25deg); }
+        50%  { transform: translate3d(16vw, 22vh, 0) rotate(30deg); }
+        75%  { transform: translate3d(24vw, -18vh, 0) rotate(-20deg); }
+        100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    }
+
+    /* MOBILE TUNED AMBIENT BLOBS: Richly visible, centered, and dynamically framed */
+    @media (max-width: 768px) {
+        .ambient-blob {
+            filter: blur(50px);
+            -webkit-filter: blur(50px);
+            opacity: 0.58;
+        }
+
+        .ambient-blob.blob-1 {
+            width: 105vw;
+            height: 105vw;
+            top: -8vh;
+            left: -10vw;
+            animation: driftBlobMobile1 8s ease-in-out infinite;
+        }
+
+        .ambient-blob.blob-2 {
+            width: 95vw;
+            height: 95vw;
+            top: 24vh;
+            right: -10vw;
+            animation: driftBlobMobile2 9.5s ease-in-out infinite;
+        }
+
+        .ambient-blob.blob-3 {
+            width: 110vw;
+            height: 110vw;
+            bottom: -6vh;
+            left: -5vw;
+            animation: driftBlobMobile3 8.5s ease-in-out infinite;
+        }
+
+        .ambient-blob.blob-4 {
+            width: 88vw;
+            height: 88vw;
+            top: 48vh;
+            left: 6vw;
+            animation: driftBlobMobile4 9s ease-in-out infinite;
+        }
+
+        @keyframes driftBlobMobile1 {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            25%  { transform: translate3d(8vw, 10vh, 0) rotate(15deg); }
+            50%  { transform: translate3d(-5vw, 16vh, 0) rotate(-10deg); }
+            75%  { transform: translate3d(-10vw, 6vh, 0) rotate(15deg); }
+            100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        }
+
+        @keyframes driftBlobMobile2 {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            25%  { transform: translate3d(-10vw, 12vh, 0) rotate(-15deg); }
+            50%  { transform: translate3d(-14vw, -8vh, 0) rotate(10deg); }
+            75%  { transform: translate3d(-4vw, -12vh, 0) rotate(-10deg); }
+            100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        }
+
+        @keyframes driftBlobMobile3 {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            25%  { transform: translate3d(10vw, -12vh, 0) rotate(20deg); }
+            50%  { transform: translate3d(-8vw, -16vh, 0) rotate(-15deg); }
+            75%  { transform: translate3d(-12vw, 6vh, 0) rotate(10deg); }
+            100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        }
+
+        @keyframes driftBlobMobile4 {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            25%  { transform: translate3d(-10vw, -8vh, 0) rotate(-15deg); }
+            50%  { transform: translate3d(10vw, 12vh, 0) rotate(20deg); }
+            75%  { transform: translate3d(12vw, -10vh, 0) rotate(-10deg); }
+            100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        }
     }
 
     /* 3. WAVE RIBBONS ECHOING THE VIDEO (Sinuous SVG paths, gradient stroke, opacity 0.15-0.25) */

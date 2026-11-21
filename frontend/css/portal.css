@@ -453,8 +453,11 @@ html[data-role="user"] #pingBtn {
     background: rgba(3, 6, 14, 0.72) !important;
     backdrop-filter: blur(32px) saturate(160%) !important;
     -webkit-backdrop-filter: blur(32px) saturate(160%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.18) !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(0, 0, 0, 0.25) !important;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 /* NAVBAR NAVIGATION BUTTONS: CENTER OF REMAINING NAV SPACE
@@ -789,37 +792,50 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 .auth-modal-card {
     width: 100%;
     max-width: 420px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%),
-                hsl(268 30% 8% / 0.94);
-    backdrop-filter: blur(40px) saturate(170%);
-    -webkit-backdrop-filter: blur(40px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: color-mix(in srgb, var(--wave-deep) 65%, transparent) !important;
+    backdrop-filter: blur(28px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(150%) !important;
+    border: none !important;
+    outline: none !important;
     border-radius: 24px;
     padding: 32px 28px 26px;
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.65),
-                0 0 40px -10px color-mix(in srgb, var(--wave-1) 30%, transparent),
-                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.8),
+                0 0 32px rgba(0, 0, 0, 0.5) !important;
     position: relative;
     overflow: hidden;
     transform: translateY(14px) scale(0.98);
     transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Subtle top hairline matching navbar and cards */
-.auth-modal-card::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 12%;
-    right: 12%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
-    pointer-events: none;
-    z-index: 2;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 .auth-modal.open .auth-modal-card {
-    transform: translateY(0) scale(1);
+    transform: translateY(0) scale(1) !important;
+}
+
+.auth-modal-card:hover,
+.auth-modal-card:active,
+.auth-modal-card.is-tapped {
+    border: none !important;
+    outline: none !important;
+}
+
+.auth-modal.open .auth-modal-card:hover,
+.auth-modal.open .auth-modal-card:active,
+.auth-modal.open .auth-modal-card.is-tapped {
+    transform: translateY(0) scale(1) !important;
+}
+
+.auth-modal-card::after {
+    display: none !important;
+    content: none !important;
+}
+
+.auth-modal-card:hover::before,
+.auth-modal-card:active::before,
+.auth-modal-card.is-tapped::before {
+    transform: translateX(0%) !important;
+    opacity: 0.60 !important;
 }
 
 .auth-modal-close {
@@ -869,16 +885,19 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4px;
-    background: rgba(0, 0, 0, 0.40);
+    background: rgba(0, 0, 0, 0.45);
     padding: 4px;
     border-radius: var(--radius-full);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     margin: 0 0 22px 0;
 }
 
 .role-select-card {
     background: transparent;
-    border: none;
+    border: none !important;
+    outline: none !important;
     border-radius: var(--radius-full);
     padding: 8px 16px;
     display: flex;
@@ -891,7 +910,6 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     font-size: 13px;
     font-weight: 500;
     transition: all var(--transition-fast);
-    outline: none;
 }
 
 .role-select-card svg {
@@ -909,11 +927,12 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 }
 
 .role-select-card.active {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.14) !important;
     color: #ffffff;
     font-weight: 600;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3),
-                inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
 }
 
 .role-select-card.active svg {
@@ -944,8 +963,9 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 }
 
 .modal-login-form .auth-input {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: none !important;
+    outline: none !important;
     color: #ffffff;
     border-radius: 12px;
     padding: 11px 14px;
@@ -953,7 +973,6 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     font-family: var(--font-body);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
     transition: all var(--transition-fast);
-    outline: none;
 }
 
 .modal-login-form .auth-input::placeholder {
@@ -961,14 +980,16 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 }
 
 .modal-login-form .auth-input:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
+    border: none !important;
+    outline: none !important;
+    background: rgba(255, 255, 255, 0.08) !important;
 }
 
 .modal-login-form .auth-input:focus {
-    border-color: color-mix(in srgb, var(--wave-light) 50%, rgba(255, 255, 255, 0.5));
-    background: rgba(255, 255, 255, 0.07);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wave-1) 22%, transparent);
+    border: none !important;
+    outline: none !important;
+    background: rgba(255, 255, 255, 0.09) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wave-1) 40%, transparent) !important;
 }
 
 .modal-auth-error {
@@ -976,7 +997,8 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     align-items: center;
     gap: 8px;
     background: color-mix(in srgb, var(--rose) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--rose) 26%, transparent);
+    border: none !important;
+    outline: none !important;
     color: #fca5a5;
     padding: 10px 14px;
     border-radius: 10px;
@@ -995,7 +1017,8 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     align-items: center;
     gap: 8px;
     background: color-mix(in srgb, #10b981 12%, transparent);
-    border: 1px solid color-mix(in srgb, #10b981 28%, transparent);
+    border: none !important;
+    outline: none !important;
     color: #6ee7b7;
     padding: 10px 14px;
     border-radius: 10px;
@@ -1049,8 +1072,9 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    background: color-mix(in srgb, var(--wave-1) 12%, rgba(255, 255, 255, 0.03));
-    border: 1px solid color-mix(in srgb, var(--wave-light) 22%, transparent);
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: none !important;
+    outline: none !important;
     color: var(--text-secondary);
     padding: 10px 14px;
     border-radius: 12px;
@@ -1086,9 +1110,9 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     border-radius: var(--radius-full);
     background: #ffffff;
     color: #000000;
-    border: none;
-    box-shadow: 0 4px 18px rgba(255, 255, 255, 0.16),
-                inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 4px 18px rgba(255, 255, 255, 0.16) !important;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1133,7 +1157,7 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     gap: 6px;
     margin-top: 20px;
     padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: none !important;
     font-size: 12.5px;
     font-family: var(--font-body);
 }
@@ -1209,28 +1233,71 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     margin-top: 24px;
 }
 
+/* Suppress bevel lights and remove outlines on all modal & popup buttons */
+.auth-modal .btn::before,
+.auth-modal .btn::after,
+.logout-modal-card .btn::before,
+.logout-modal-card .btn::after,
+.logout-modal-actions .btn::before,
+.logout-modal-actions .btn::after,
+#sanadaLogoutModal .btn::before,
+#sanadaLogoutModal .btn::after,
+#sanadaDeleteKeyModal .btn::before,
+#sanadaDeleteKeyModal .btn::after,
+#modalLogoutCancelBtn::before,
+#modalLogoutCancelBtn::after,
+#modalLogoutConfirmBtn::before,
+#modalLogoutConfirmBtn::after,
+#modalDeleteKeyCancelBtn::before,
+#modalDeleteKeyCancelBtn::after,
+#modalDeleteKeyConfirmBtn::before,
+#modalDeleteKeyConfirmBtn::after {
+    display: none !important;
+    content: none !important;
+    opacity: 0 !important;
+}
+
+.auth-modal .btn,
+.logout-modal-card .btn,
+.logout-modal-actions .btn,
+#sanadaLogoutModal .btn,
+#sanadaDeleteKeyModal .btn,
+#modalLogoutCancelBtn,
+#modalLogoutConfirmBtn,
+#modalDeleteKeyCancelBtn,
+#modalDeleteKeyConfirmBtn {
+    border: none !important;
+    outline: none !important;
+}
+
 .btn-modal-cancel {
-    background: var(--bg-2);
-    border: 1px solid var(--border-tint);
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: none !important;
+    outline: none !important;
     color: var(--text-secondary);
     border-radius: var(--radius-full);
     padding: 11px 18px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: var(--transition-fast);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .btn-modal-cancel:hover {
-    background: var(--bg-hover);
-    color: #ffffff;
-    border-color: var(--glass-border);
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    border: none !important;
+    outline: none !important;
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4) !important;
 }
 
 .btn-modal-confirm-logout {
-    background: color-mix(in srgb, var(--rose) 25%, #18090e);
-    border: 1px solid color-mix(in srgb, var(--rose) 60%, transparent);
-    color: #ffffff;
+    background: color-mix(in srgb, var(--rose) 28%, #16060a) !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
     border-radius: var(--radius-full);
     padding: 11px 18px;
     font-size: 13px;
@@ -1240,16 +1307,17 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     justify-content: center;
     gap: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--rose) 25%, transparent);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 18px rgba(225, 29, 72, 0.28) !important;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-modal-confirm-logout:hover {
-    background: var(--rose);
-    border-color: var(--rose);
-    color: #000000;
-    box-shadow: 0 6px 24px color-mix(in srgb, var(--rose) 50%, transparent);
-    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--rose) 40%, #1f070e) !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 24px rgba(225, 29, 72, 0.42) !important;
 }
 
 @media (max-width: 540px) {

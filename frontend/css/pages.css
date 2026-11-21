@@ -124,6 +124,8 @@
         min-height: 290px;
         margin-bottom: 0;
         box-sizing: border-box;
+        position: relative;
+        overflow: hidden;
     }
 
     .task-mono-label {
@@ -272,9 +274,12 @@
         align-items: center;
         padding: 24px 20px;
         background: rgba(255, 255, 255, 0.02);
-        border: 1px solid var(--border-tint);
+        border: none;
+        outline: none;
         border-radius: var(--radius-lg);
         margin-bottom: 16px;
+        position: relative;
+        overflow: hidden;
     }
 
     .explorer-metric-large {
@@ -487,7 +492,8 @@
         backdrop-filter: blur(50px);
         -webkit-backdrop-filter: blur(50px);
         color: #ffffff;
-        border: 1px solid var(--border-tint);
+        border: none !important;
+        outline: none !important;
         padding: 12px 28px;
         border-radius: var(--radius-full);
         font-size: 14px;
@@ -496,14 +502,17 @@
         align-items: center;
         gap: 8px;
         text-decoration: none;
-        transition: var(--transition-fast);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease, color 0.15s ease;
     }
 
     .cta-btn-glass:hover {
-        background: var(--bg-hover);
-        border-color: color-mix(in srgb, var(--wave-light) 40%, transparent);
-        box-shadow: 0 0 16px var(--accent-glow);
+        background: var(--glass-fill) !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: 0 10px 24px -4px rgba(0, 0, 0, 0.5), 0 0 14px rgba(255, 255, 255, 0.05);
         color: #ffffff;
+        transform: translateY(-3.5px);
     }
 
     .cta-btn-white {
@@ -1014,8 +1023,17 @@
     .ingest-controls-stacked {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
         margin-top: 14px;
+    }
+
+    .ingest-controls-stacked #browseBtn,
+    #browseBtn {
+        min-height: 48px;
+        padding: 13px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
     }
 
     .validate-actions {
@@ -1199,6 +1217,11 @@
         padding: 18px 20px;
         gap: 12px;
         min-height: 190px;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                    border-color 0.28s ease,
+                    box-shadow 0.28s ease;
     }
 
     .step-card-meta {
