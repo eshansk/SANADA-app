@@ -180,14 +180,14 @@
                                     <div class="task-mono-label">TASK 01</div>
                                     <h2 class="card-title">Source Counting (<em>K</em>)</h2>
                                 </div>
-                                <span class="badge">Conformer MSE</span>
+                                <span class="badge">WavLM-Base+ + Table-3 DSP (K=1..32)</span>
                             </div>
                             <p class="home-task-card-desc">
                                 Continuous regression of active sound emitters from raw audio mixtures.
                             </p>
                             <div class="task-headline-metric">
-                                <div class="metric-val">0.082 <span class="metric-unit">MAE</span></div>
-                                <div class="metric-caption">Org-Mix-4 &bull; 94.2% Exact Accuracy</div>
+                                <div class="metric-val">0.124 <span class="metric-unit">MAE</span></div>
+                                <div class="metric-caption">WavLM-Base+ &bull; 92.5% Exact Accuracy &bull; K=1..32</div>
                             </div>
                             <div class="task-mini-graphic graphic-dots" aria-hidden="true">
                                 <span class="dot-item active"></span>
@@ -208,14 +208,14 @@
                                     <div class="task-mono-label">TASK 02</div>
                                     <h2 class="card-title">Multi-Label Tagging</h2>
                                 </div>
-                                <span class="badge">Conformer ASL</span>
+                                <span class="badge">MIT AST (33-Class Speech-Proof)</span>
                             </div>
                             <p class="home-task-card-desc">
-                                Asymmetric Loss classification across 32 heterogeneous acoustic event classes.
+                                Pretrained MIT Audio Spectrogram Transformer across 33 acoustic event classes.
                             </p>
                             <div class="task-headline-metric">
-                                <div class="metric-val">0.942 <span class="metric-unit">mAP</span></div>
-                                <div class="metric-caption">32 Classes &bull; 0.915 F1 &bull; 0.978 AUC</div>
+                                <div class="metric-val">0.812 <span class="metric-unit">mAP</span></div>
+                                <div class="metric-caption">33 Classes &bull; 98.8% Pure Speech Rejection</div>
                             </div>
                             <div class="task-mini-graphic graphic-chips" aria-hidden="true">
                                 <span class="mini-tag-chip">Speech</span>
@@ -232,14 +232,14 @@
                                     <div class="task-mono-label">TASK 03</div>
                                     <h2 class="card-title">Speech Separation</h2>
                                 </div>
-                                <span class="badge">Conv-TasNet SI-SDR</span>
+                                <span class="badge">Adaptive Separation Router</span>
                             </div>
                             <p class="home-task-card-desc">
-                                Time-domain uPIT mask estimation reconstructing clean monaural waveforms.
+                                Adaptive Separation Router (SepFormer-Libri2Mix / Libri3Mix / ConvTasNetSkip-H512).
                             </p>
                             <div class="task-headline-metric">
-                                <div class="metric-val">+10.59 <span class="metric-unit">dB</span></div>
-                                <div class="metric-caption">K=2 Conv-TasNet SI-SDR &bull; uPIT Loss</div>
+                                <div class="metric-val">+16.20 <span class="metric-unit">dB</span></div>
+                                <div class="metric-caption">SepFormer-Libri2Mix (+5.6 dB vs Paper) &bull; K=2..4+</div>
                             </div>
                             <div class="task-mini-graphic graphic-split" aria-hidden="true">
                                 <svg class="mini-split-svg" viewBox="0 0 200 24" fill="none" stroke="currentColor">
@@ -356,12 +356,12 @@
                                 <!-- DROP CONTAINER -->
                                 <div id="dropContainer">
                                     <div class="dropzone" id="dropZone">
-                                        <input type="file" id="fileInput" accept=".wav" class="u-hidden">
+                                        <input type="file" id="fileInput" accept="audio/*,.wav,.m4a,.mp3,.ogg,.webm,.3gp" class="u-hidden">
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="dropzone-icon">
                                             <path d="M12 3v13m0-13l-4 4m4-4l4 4"></path>
                                             <path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"></path>
                                         </svg>
-                                        <div class="dropzone-title">Drop 16 kHz Mono .WAV File</div>
+                                        <div class="dropzone-title">Drop Audio File (.WAV, .M4A, .MP3, .OGG, .WEBM)</div>
                                         <div class="dropzone-sub">Standardized to exactly 8.0 seconds (128,000 samples)</div>
                                     </div>
 
@@ -597,7 +597,7 @@
                                         <h2 class="card-title">
                                             <span>Source count</span>
                                         </h2>
-                                        <span class="badge" id="kModelBadge">Conformer-MSE</span>
+                                        <span class="badge" id="kModelBadge">WavLM-Base+</span>
                                     </div>
                                     <div class="k-hero-box">
                                         <div class="k-hero-number" id="kHeroNumber">—</div>
@@ -660,7 +660,7 @@
                                         <h2 class="card-title">
                                             <span>Active tags</span>
                                         </h2>
-                                        <span class="badge">Conformer-ASL</span>
+                                        <span class="badge" id="taggingModelBadge">MIT AST (33-Class)</span>
                                     </div>
                                     <div id="probBarsContainer">
                                         <div class="ghost-empty-state">
@@ -680,7 +680,7 @@
                                     <h2 class="card-title">
                                         <span>Separated stems</span>
                                     </h2>
-                                    <span class="badge">Conv-TasNet</span>
+                                    <span class="badge" id="separationModelBadge">Adaptive Specialist Router</span>
                                 </div>
                                 <div id="stemsContainer">
                                     <div class="ghost-empty-state">

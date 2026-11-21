@@ -86,7 +86,7 @@ To connect the frontend with the live FastAPI backend:
 cd backend
 uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
-The frontend automatically connects to the production Hugging Face Spaces backend at `https://eshansk-sanada-backend.hf.space`. To override this, set `window.SANADA_API_BASE = 'https://api.yourdomain.com'` before loading `main.js`.
+The frontend uses same-origin relative URLs (`/api/...`) connecting directly to the backend. To target an external backend or campus cluster, set `window.SANADA_API_BASE = 'http://cluster-ip:8000'` or `localStorage.setItem('SANADA_API_BASE', 'http://cluster-ip:8000')`.
 
 ---
 

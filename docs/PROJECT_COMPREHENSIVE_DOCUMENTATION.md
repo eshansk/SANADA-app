@@ -789,7 +789,7 @@ The codebase enforces strict quality assurance verified by four independent auto
   * Maps persistent volumes for checkpoint exports and logs.
 
 ### 11.2 Multi-Target Hosting Topology
-* **Cloud Backend:** Deployed to **Hugging Face Spaces** (`eshansk-sanada-backend.hf.space`) using Docker containerization with automated PyTorch CPU/CUDA runtime detection.
+* **Campus Cluster & Cloud Backend:** Deployable to local servers, campus HDFS/Spark clusters, Docker hosts, or cloud instances using containerization with automated PyTorch CPU/CUDA runtime detection and zero-network offline caching.
 * **Cloud Frontend:** Deployable to **Vercel** or **Netlify** via `frontend/vercel.json` with automatic proxying to the backend API.
 * **PaaS Alternative:** Ready for **Render** via `render.yaml`.
 * **Local One-Touch Launch:**

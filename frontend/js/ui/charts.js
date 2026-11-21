@@ -6,7 +6,7 @@
  * or /api/stats telemetry, with white-tier styling, 0 dB dashed boundary, and hover tooltips.
  */
 
-import { PAPER_BENCHMARKS } from '../data/paperBenchmarks.js';
+import { PAPER_BENCHMARKS, PATH_B_FALLBACK_BENCHMARKS } from '../data/paperBenchmarks.js';
 
 export const ChartHelper = {
     getBenchmarks() {
@@ -19,15 +19,34 @@ export const ChartHelper = {
     },
 
     renderSisdrRows(rows) {
-        const data = (rows && rows.length > 0) ? rows : PAPER_BENCHMARKS.separationSisdr.orgMixFixed;
+        const data = (rows && rows.length > 0) ? rows : (PATH_B_FALLBACK_BENCHMARKS?.separationSisdr?.results || PAPER_BENCHMARKS.separationSisdr.orgMixFixed);
         return data.map(row => {
             const val = row.si_sdr_db !== undefined ? row.si_sdr_db : row.sisdrDb;
             const statusBadge = val >= 4.0 ? 'pass' : (val >= 0 ? 'warn' : 'fail');
+            
+            // Extract or resolve paper baseline comparison delta
+            let paperBase = row.paper_baseline_db;
+            if (paperBase === undefined) {
+                const kVal = Number(row.density_k || row.k);
+                const found = PAPER_BENCHMARKS.separationSisdr.orgMixFixed.find(p => p.k === kVal);
+                if (found) paperBase = found.sisdrDb;
+            }
+
+            let deltaHtml = '';
+            if (paperBase !== undefined && paperBase !== null && !isNaN(paperBase)) {
+                const delta = val - paperBase;
+                const sign = delta >= 0 ? '+' : '';
+                deltaHtml = `<span style="display:block; font-size:10px; color:${delta >= 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'}; font-weight: 500;">(${sign}${delta.toFixed(2)} dB vs Paper)</span>`;
+            }
+
             return `
                 <tr>
                     <td><strong>K = ${row.density_k || row.k || '—'}</strong></td>
                     <td>${row.domain || 'Org-Mix Fixed'}</td>
-                    <td class="font-mono" style="font-weight: 600;">${val >= 0 ? '+' : ''}${Number(val).toFixed(2)} dB</td>
+                    <td class="font-mono" style="font-weight: 600;">
+                        ${val >= 0 ? '+' : ''}${Number(val).toFixed(2)} dB
+                        ${deltaHtml}
+                    </td>
                     <td><span class="badge ${statusBadge}">${row.status || (val >= 0 ? 'Usable' : 'Degraded')}</span></td>
                 </tr>
             `;
@@ -68,7 +87,7 @@ export const ChartHelper = {
      */
     renderSisdrChart(container, rows) {
         if (!container) return;
-        const data = (rows && rows.length > 0) ? rows : PAPER_BENCHMARKS.separationSisdr.orgMixFixed;
+        const data = (rows && rows.length > 0) ? rows : (PATH_B_FALLBACK_BENCHMARKS?.separationSisdr?.results || PAPER_BENCHMARKS.separationSisdr.orgMixFixed);
 
         const W = 360;
         const H = 220;
@@ -80,14 +99,9 @@ export const ChartHelper = {
         const plotW = W - padL - padR;
         const plotH = H - padT - padB;
 
-        // X scale: K min 2, K max 9 (proportional spacing)
-        const kMin = 2;
-        const kMax = 9;
-        const getX = (k) => padL + ((k - kMin) / (kMax - kMin)) * plotW;
-
-        // Y scale: -10 dB to +12 dB
+        // Auto-scale Y scale cleanly: -10 dB to +20 dB (no clipping for +15–19 dB Path B models)
         const yMin = -10;
-        const yMax = 12;
+        const yMax = 20;
         const getY = (db) => (H - padB) - ((db - yMin) / (yMax - yMin)) * plotH;
 
         const zeroY = getY(0);
@@ -96,18 +110,24 @@ export const ChartHelper = {
         const kMap = new Map();
         data.forEach(d => {
             const k = Number(d.k || d.density_k);
-            if (!kMap.has(k) || (d.domain && d.domain.includes('Fixed'))) {
-                const db = Number(d.sisdrDb !== undefined ? d.sisdrDb : d.si_sdr_db);
-                kMap.set(k, {
-                    k,
-                    db,
-                    status: d.status || ''
-                });
+            if (!isNaN(k)) {
+                if (!kMap.has(k) || (d.domain && (d.domain.includes('Specialist') || d.domain.includes('Fixed')))) {
+                    const db = Number(d.sisdrDb !== undefined ? d.sisdrDb : d.si_sdr_db);
+                    kMap.set(k, {
+                        k,
+                        db,
+                        status: d.status || ''
+                    });
+                }
             }
         });
 
         // Sort ascending by K
         const uniquePoints = Array.from(kMap.values()).sort((a, b) => a.k - b.k);
+
+        const kMin = uniquePoints.length > 0 ? Math.min(uniquePoints[0].k, 1) : 1;
+        const kMax = uniquePoints.length > 0 ? Math.max(uniquePoints[uniquePoints.length - 1].k, 9) : 9;
+        const getX = (k) => padL + ((k - kMin) / (kMax - kMin)) * plotW;
 
         const points = uniquePoints.map(p => ({
             ...p,
@@ -146,7 +166,8 @@ export const ChartHelper = {
                 <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
 
                 <!-- Y Axis Labels -->
-                <text x="${padL - 6}" y="${getY(12) + 3}" text-anchor="end" fill="rgba(255,255,255,0.45)" font-family="var(--font-mono, monospace)" font-size="8">+12 dB</text>
+                <text x="${padL - 6}" y="${getY(20) + 3}" text-anchor="end" fill="rgba(255,255,255,0.45)" font-family="var(--font-mono, monospace)" font-size="8">+20 dB</text>
+                <text x="${padL - 6}" y="${getY(10) + 3}" text-anchor="end" fill="rgba(255,255,255,0.45)" font-family="var(--font-mono, monospace)" font-size="8">+10 dB</text>
                 <text x="${padL - 6}" y="${zeroY + 3}" text-anchor="end" fill="rgba(255,255,255,0.65)" font-family="var(--font-mono, monospace)" font-size="8" font-weight="600">0 dB</text>
                 <text x="${padL - 6}" y="${getY(-10) + 3}" text-anchor="end" fill="rgba(255,255,255,0.45)" font-family="var(--font-mono, monospace)" font-size="8">-10 dB</text>
 

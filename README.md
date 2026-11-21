@@ -89,15 +89,19 @@ SANADA/
 
 ## 5. Quickstart & Launching the App
 
-### Running the App (Hugging Face Backend Mode)
+### Running the Unified Server (FastAPI + Web UI)
 ```bash
 ./start_system.sh
 ```
-* Launches the SANADA Client on **`http://localhost:3000`**.
-* Connects directly to the live 24/7 ZeroGPU backend on Hugging Face:
-  * Backend URL: **`https://eshansk-sanada-backend.hf.space`**
-  * Interactive API Docs: **`https://eshansk-sanada-backend.hf.space/docs`**
-  * Live Health Status: **`https://eshansk-sanada-backend.hf.space/api/health`**
+* Launches the unified SANADA server on **`http://localhost:8000`** (serving both the Web UI and API).
+* Interactive API Docs: **`http://localhost:8000/docs`**
+* Live Health Status: **`http://localhost:8000/api/health`**
+
+### Running in Campus Cluster Mode
+```bash
+./scripts/cluster_start.sh
+```
+* Runs 100% offline with multi-threaded CPU inference (`OMP_NUM_THREADS=4`).
 
 ### Running Verification & Test Suites
 ```bash

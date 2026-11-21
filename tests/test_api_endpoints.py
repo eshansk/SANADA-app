@@ -21,6 +21,7 @@ import os
 import sys
 import time
 import json
+import subprocess
 from fastapi.testclient import TestClient
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -42,15 +43,39 @@ def run_api_tests():
     print(" SANADA REST API & MULTI-TIER PIPELINE INTEGRATION TEST SUITE")
     print("=" * 85)
     
-    # 0. Root Endpoint
-    print("\n[TEST 0] GET / (Root Service Vitality & Route Discovery)...")
+    # 0a. Frontend Web UI Serving on Single Port
+    print("\n[TEST 0a] GET / (Single-Port Cluster Frontend Web UI)...")
+    res_front = client.get("/")
+    assert res_front.status_code == 200
+    assert "html" in res_front.text.lower()
+    print(" [PASS] Single-port Frontend Web UI mounted and served successfully at /")
+
+    # 0b. API Discovery Endpoint
+    print("\n[TEST 0b] GET /api/info (Service Vitality & Route Discovery)...")
     t0 = time.time()
-    res = client.get("/")
+    res = client.get("/api/info")
     lat = round((time.time() - t0) * 1000, 2)
     assert res.status_code == 200
     root_data = res.json()
     assert root_data["status"] == "online"
     print(f" [PASS] Status: {root_data['status']} | Service: {root_data['service']} | Docs: {root_data['docs_url']} | Latency: {lat} ms")
+
+    # 0c. CORS Headers Verification for Vercel & Mobile WebView
+    print("\n[TEST 0c] OPTIONS /api/info (CORS Preflight Policy Verification)...")
+    res_cors = client.options(
+        "/api/info",
+        headers={
+            "Origin": "https://sanada-frontend.vercel.app",
+            "Access-Control-Request-Method": "GET"
+        }
+    )
+    assert res_cors.status_code == 200
+    allow_origin = res_cors.headers.get("access-control-allow-origin")
+    allow_cred = res_cors.headers.get("access-control-allow-credentials")
+    # When allow_origin is '*', access-control-allow-credentials must not be 'true'
+    if allow_origin == "*":
+        assert allow_cred != "true"
+    print(f" [PASS] CORS Headers: Allow-Origin={allow_origin} | Allow-Credentials={allow_cred}")
 
     # 1. Health check
     print("\n[TEST 1] GET /api/health (Vitality & Telemetry)...")
@@ -82,6 +107,52 @@ def run_api_tests():
     assert res.status_code == 200
     data = res.json()
     print(f" [PASS] Audio Standard Validated: {data['standard_compliant']} | 16 kHz Mono 8.0s")
+
+    # 3b. Mobile Multi-Format Validation (.mp3 & .m4a upload & unsupported format rejection)
+    print("\n[TEST 3b] POST /api/upload (Mobile Multi-Format Decoding & Rejection)...")
+    # Generate 1-second in-memory mp3 bytes
+    sine_proc = subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=1000:duration=1", "-f", "mp3", "pipe:1"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True
+    )
+    mp3_bytes = sine_proc.stdout
+    res_mp3 = client.post("/api/upload", files={"file": ("mobile_recording.mp3", mp3_bytes, "audio/mpeg")})
+    assert res_mp3.status_code == 200
+    mp3_data = res_mp3.json()
+    assert mp3_data["status"] == "valid"
+    assert mp3_data["sample_rate_hz"] in [16000, 44100]
+    print(f" [PASS] Mobile MP3 format validated and decoded successfully: {mp3_data['filename']} ({mp3_data['duration_s']}s)")
+
+    # Generate 1-second in-memory m4a bytes using seekable temporary file
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as gen_f:
+        gen_m4a_path = gen_f.name
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=1000:duration=1", "-c:a", "aac", gen_m4a_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True
+    )
+    with open(gen_m4a_path, "rb") as f:
+        m4a_bytes = f.read()
+    try:
+        os.remove(gen_m4a_path)
+    except OSError:
+        pass
+
+    res_m4a = client.post("/api/upload", files={"file": ("mobile_recording.m4a", m4a_bytes, "audio/mp4")})
+    assert res_m4a.status_code == 200
+    m4a_data = res_m4a.json()
+    assert m4a_data["status"] == "valid"
+    assert m4a_data["sample_rate_hz"] == 16000
+    print(f" [PASS] Mobile M4A format (seekable decoder) validated: {m4a_data['filename']} ({m4a_data['duration_s']}s)")
+
+    # Unsupported format rejection check
+    res_bad = client.post("/api/upload", files={"file": ("report.txt", b"plain text", "text/plain")})
+    assert res_bad.status_code == 400
+    print(" [PASS] Non-audio format (.txt) properly rejected with HTTP 400")
 
     # 4. Predict
     print("\n[TEST 4] POST /api/predict (End-User Inference with Multi-Mode Support)...")
@@ -121,6 +192,32 @@ def run_api_tests():
     live_json = res_live.json()
     assert live_json["mode_used"] == "live_mic"
     print(f" [PASS] Live Mic Route Latency: {lat_live} ms | Mode: {live_json['mode_used']} | Predicted K: {live_json['predicted_k']}")
+
+    # 4c. Mobile Audio Multi-Format Inference (/api/predict with .mp3)
+    print("\n[TEST 4c] POST /api/predict (Mobile Multi-Format Decoding Inference)...")
+    res_mobile_pred = client.post(
+        "/api/predict",
+        files={"file": ("mobile_voice.mp3", mp3_bytes, "audio/mpeg")},
+        data={"task": "counting", "mode": "auto"}
+    )
+    assert res_mobile_pred.status_code == 200
+    mobile_json = res_mobile_pred.json()
+    assert mobile_json["status"] == "success"
+    assert "predicted_k" in mobile_json
+    print(f" [PASS] Mobile MP3 decoded & inferred successfully: predicted_k={mobile_json['predicted_k']} | duration={mobile_json['duration_sec']}s")
+
+    # 4d. Mobile Audio M4A Inference (/api/predict with .m4a seekable stream)
+    print("\n[TEST 4d] POST /api/predict (Mobile M4A Seekable Decoder Inference)...")
+    res_m4a_pred = client.post(
+        "/api/predict",
+        files={"file": ("mobile_voice.m4a", m4a_bytes, "audio/mp4")},
+        data={"task": "counting", "mode": "auto"}
+    )
+    assert res_m4a_pred.status_code == 200
+    m4a_pred_json = res_m4a_pred.json()
+    assert m4a_pred_json["status"] == "success"
+    assert "predicted_k" in m4a_pred_json
+    print(f" [PASS] Mobile M4A decoded & inferred successfully: predicted_k={m4a_pred_json['predicted_k']} | duration={m4a_pred_json['duration_sec']}s")
 
     # 5. Developer Training Trigger (/api/train)
     print("\n[TEST 5] POST /api/train (Developer Training Trigger)...")
@@ -171,6 +268,10 @@ def run_api_tests():
     print(" ALL 9 FULL-STACK REST ENDPOINTS VALIDATED SUCCESSFULLY.")
     print(" Backend API is 100% production-ready for Docker containerization and cloud deployment.")
     print("=" * 85)
+
+def test_api_endpoints():
+    """Pytest entrypoint for the full API endpoint test suite."""
+    run_api_tests()
 
 if __name__ == "__main__":
     run_api_tests()

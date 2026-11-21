@@ -1,17 +1,77 @@
 {
   "counting": {
-    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/conformer_counting_baseline.pt",
-    "status": "cached",
-    "version": "1.0.0"
+    "filename": "wavlm_counting_pathb.pt",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/wavlm_counting_pathb.pt",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 379858883,
+    "size_mb": 362.26,
+    "description": "WavLMSourceCounter with ASP and Table-3 DSP fusion (K=1..32)"
   },
   "tagging": {
-    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/conformer_tagging_asl.pt",
-    "status": "cached",
-    "version": "1.0.0"
+    "filename": "ast_tagging_pathb.pt",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/ast_tagging_pathb.pt",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 344909245,
+    "size_mb": 328.93,
+    "description": "MIT AST 33-Class Tagger with dynamic speech gate"
   },
-  "separation": {
-    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/conv_tasnet_separation.pt",
-    "status": "cached",
-    "version": "1.0.0"
+  "separation_2spk": {
+    "filename": "sepformer_2spk_pathb.pt",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/sepformer_2spk_pathb.pt",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 113060551,
+    "size_mb": 107.82,
+    "description": "Sepformer 2-speaker separation specialist"
+  },
+  "separation_3spk": {
+    "filename": "sepformer_3spk_pathb.pt",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/sepformer_3spk_pathb.pt",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 113323719,
+    "size_mb": 108.07,
+    "description": "Sepformer 3-speaker separation specialist"
+  },
+  "separation_4spk_dominant": {
+    "filename": "sepformer_4spk_dominant_pathb.pt",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/sepformer_4spk_dominant_pathb.pt",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 113587127,
+    "size_mb": 108.33,
+    "description": "Sepformer/ConvTasNetSkip 4-speaker dominant crowd separator"
+  },
+  "benchmarks": {
+    "filename": "pathb_benchmarks.json",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/pathb_benchmarks.json",
+    "status": "ready",
+    "tier": "path_b_foundation",
+    "size_bytes": 2507,
+    "size_mb": 0.0,
+    "description": "Path B benchmark metrics including pure speech rejection"
+  },
+  "counting_legacy": {
+    "filename": "conformer_counting_baseline.pt",
+    "path": null,
+    "status": "missing",
+    "tier": "legacy_fallback",
+    "size_bytes": 0
+  },
+  "tagging_legacy": {
+    "filename": "conformer_tagging_baseline.pt",
+    "path": null,
+    "status": "missing",
+    "tier": "legacy_fallback",
+    "size_bytes": 0
+  },
+  "separation_legacy": {
+    "filename": "conv_tasnet_separation.pt",
+    "path": null,
+    "status": "missing",
+    "tier": "legacy_fallback",
+    "size_bytes": 0
   }
 }

@@ -116,11 +116,15 @@ export const API = {
     },
 
     /**
-     * Formats relative stem URL to absolute stream endpoint
+     * Formats relative stem or demo URL to absolute stream endpoint
      */
     getStemUrl(relativeUrl) {
         if (!relativeUrl) return '';
         if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) return relativeUrl;
-        return `${API_BASE}${relativeUrl.startsWith('/') ? '' : '/'}${relativeUrl}`;
+        const clean = relativeUrl.startsWith('/') ? relativeUrl.slice(1) : relativeUrl;
+        if (!clean.includes('/')) {
+            return `${API_BASE}/static/demos/${clean}`;
+        }
+        return `${API_BASE}/${clean}`;
     }
 };

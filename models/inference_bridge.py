@@ -78,15 +78,19 @@ class SANADAInferenceEngine:
             print(f"Warning: SANADAPipeline initialization notice: {e}")
             self.pipeline = None
 
-        # Fallback references
-        try:
-            self.counting_model = load_counting_model(device=str(self.device))
-        except Exception:
-            self.counting_model = None
+        # Only load legacy fallback models if pipeline failed to initialize (saves RAM)
+        if self.pipeline is None:
+            try:
+                self.counting_model = load_counting_model(device=str(self.device))
+            except Exception:
+                self.counting_model = None
 
-        try:
-            self.separation_model = load_separation_model(device=str(self.device))
-        except Exception:
+            try:
+                self.separation_model = load_separation_model(device=str(self.device))
+            except Exception:
+                self.separation_model = None
+        else:
+            self.counting_model = None
             self.separation_model = None
 
         print(f"SANADA Inference Engine initialized on device: {self.device} (Pipeline active: {self.pipeline is not None})")
@@ -108,54 +112,12 @@ class SANADAInferenceEngine:
         return tensor
 
     def predict_counting(self, waveform_tensor, filename="", mode="auto"):
-        """Task 1: Conformer Regressor for Multi-Source Counting (Fix 1)."""
-        hint = filename.lower() if filename else ""
-
-        # Check verified demo file mappings for deterministic benchmark validation
-        demo_k_map = {
-            "fsd_mix_3_sounds": 3,
-            "fsd_mix_4_sounds": 4,
-            "fsd_mix_5_sounds": 5,
-            "fsd_mix_8_sounds": 8,
-            "org_mix_2_speakers": 2,
-            "org_mix_4_speakers": 4,
-            "org_mix_9_speakers": 9
-        }
-        for demo_name, true_k in demo_k_map.items():
-            if demo_name in hint:
-                return {
-                    "estimated_k": true_k,
-                    "predicted_k": true_k,
-                    "raw_continuous_prediction": float(true_k) + 0.02,
-                    "raw_k": float(true_k) + 0.02,
-                    "calibrated_k": float(true_k),
-                    "confidence": 0.98,
-                    "silent": False,
-                    "complexity_ceiling_exceeded": bool(true_k > 4),
-                    "model": "Conformer-Regressor-MSE"
-                }
-
-        # Check regex for test filenames
-        m = re.search(r'(\d+)[_\s-]*(?:speakers?|sounds?|sources?)', hint)
-        if m:
-            inferred_k = int(m.group(1))
-            if 1 <= inferred_k <= 9:
-                return {
-                    "estimated_k": inferred_k,
-                    "predicted_k": inferred_k,
-                    "raw_continuous_prediction": float(inferred_k) + 0.02,
-                    "raw_k": float(inferred_k) + 0.02,
-                    "calibrated_k": float(inferred_k),
-                    "confidence": 0.98,
-                    "silent": False,
-                    "complexity_ceiling_exceeded": bool(inferred_k > 4),
-                    "model": "Conformer-Regressor-MSE"
-                }
-
+        """Task 1: Source Counting Regressor."""
         # Invoke Production SANADAPipeline
         if self.pipeline is not None:
             wav_np = waveform_tensor.squeeze().cpu().numpy()
             res = self.pipeline.predict_counting(wav_np, waveform_tensor, mode=mode)
+            tier = "path_b_foundation" if self.pipeline.active_models.get("counting", {}).get("tier") == "path_b_foundation" else "legacy_fallback"
             return {
                 "estimated_k": res["estimated_k"],
                 "predicted_k": res["predicted_k"],
@@ -165,7 +127,8 @@ class SANADAInferenceEngine:
                 "confidence": res["confidence"],
                 "silent": res["silent"],
                 "complexity_ceiling_exceeded": res["complexity_ceiling_exceeded"],
-                "model": "Conformer-Regressor-MSE"
+                "model": res.get("model", "SANADA-SourceCounter"),
+                "tier": res.get("tier", tier)
             }
 
         # Legacy fallback
@@ -349,26 +312,45 @@ class SANADAInferenceEngine:
                 all_4_stems=all_4_stems
             )
 
-            # Perform semantic labeling on separated stems
-            if res.get("active_events") and res.get("separated_stems"):
-                active_labels = [ev["label"] for ev in res["active_events"]]
-                stem_files = [
-                    s.get("filepath") or os.path.join(STATIC_STEMS_DIR, s.get("filename", ""))
-                    for s in res["separated_stems"] if s.get("filename")
-                ]
-                if stem_files and os.path.exists(stem_files[0]):
-                    try:
-                        labeled = label_separated_stems(
-                            stem_files,
-                            active_labels,
-                            device=str(self.device)
-                        )
-                        for s, l in zip(res["separated_stems"], labeled):
-                            s["assigned_tag"] = l.get("assigned_tag", "Unknown")
-                            s["stem_confidence"] = l.get("stem_confidence", 0.90)
-                    except Exception as label_err:
-                        print(f"Stem labeling notice: {label_err}")
+            human_speech_detected = res.get("human_speech_detected", False)
+            human_speech_prob = res.get("human_speech_prob", 0.0)
+            dominant_crowd_mode = res.get("dominant_crowd_mode", False)
+            active_separator = res.get("source_separation", {}).get("model", "SANADA-ConvTasNet-uPIT")
+            model_tier = self.pipeline.active_models.get("counting", {}).get("tier", "legacy_fallback")
+            domain = res.get("source_counting", {}).get("domain_detected", "speech" if human_speech_detected else "environmental")
 
+            # Perform semantic labeling on separated stems
+            if res.get("separated_stems"):
+                if not human_speech_detected and res.get("active_events"):
+                    active_labels = [ev["label"] for ev in res["active_events"]]
+                    stem_files = [
+                        s.get("filepath") or os.path.join(STATIC_STEMS_DIR, s.get("filename", ""))
+                        for s in res["separated_stems"] if s.get("filename")
+                    ]
+                    if stem_files and os.path.exists(stem_files[0]):
+                        try:
+                            labeled = label_separated_stems(
+                                stem_files,
+                                active_labels,
+                                device=str(self.device)
+                            )
+                            for s, l in zip(res["separated_stems"], labeled):
+                                s["assigned_tag"] = l.get("assigned_tag", "Unknown")
+                                s["stem_confidence"] = l.get("stem_confidence", 0.90)
+                        except Exception as label_err:
+                            print(f"Stem labeling notice: {label_err}")
+                else:
+                    # Pure speech mixture: label stems as Speaker 1, Speaker 2, etc.
+                    for idx, s in enumerate(res["separated_stems"], start=1):
+                        s["assigned_tag"] = f"Speaker {idx}"
+                        s["stem_confidence"] = 0.95
+
+            res["human_speech_detected"] = human_speech_detected
+            res["human_speech_prob"] = human_speech_prob
+            res["active_separator"] = active_separator
+            res["dominant_crowd_mode"] = dominant_crowd_mode
+            res["model_tier"] = model_tier
+            res["domain"] = domain
             return res
 
         # Fallback if pipeline not loaded
@@ -399,6 +381,12 @@ class SANADAInferenceEngine:
             "top_5_events": tag_res.get("top_5_events", []),
             "separated_stems": results.get("source_separation", {}).get("stems", []),
             "all_4_raw_stems": results.get("source_separation", {}).get("all_4_raw_stems"),
+            "human_speech_detected": False,
+            "human_speech_prob": 0.0,
+            "active_separator": "ConvTasNet",
+            "dominant_crowd_mode": False,
+            "model_tier": "legacy_fallback",
+            "domain": "speech",
             **results
         }
 

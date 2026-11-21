@@ -48,3 +48,7 @@ Guidelines P V N Balarama Murthy/
 # Scratch notes & prompt exports
 *gemini*
 *extracted_text*
+
+# Checkpoint Caches (Local foundation downloads)
+models/checkpoints/hf_cache/
+models/checkpoints/pretrained_cache/
