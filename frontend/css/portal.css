@@ -1010,12 +1010,13 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease, color 0.15s ease;
 }
 
 .auth-modal-close:hover {
     color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.12);
+    transform: rotate(90deg);
 }
 
 .modal-title {
@@ -1143,11 +1144,13 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     background: rgba(255, 255, 255, 0.08) !important;
 }
 
-.modal-login-form .auth-input:focus {
+.modal-login-form .auth-input:focus,
+.auth-modal .auth-input:focus,
+.auth-modal input:focus {
     border: none !important;
     outline: none !important;
     background: rgba(255, 255, 255, 0.09) !important;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wave-1) 40%, transparent) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 .modal-auth-error {
@@ -1277,7 +1280,7 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 
 .btn-modal-submit:hover:not(:disabled) {
     background: #f4f4f5;
-    box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7), 0 0 26px color-mix(in srgb, var(--wave-1) 22%, transparent) !important;
+    box-shadow: 0 24px 54px -8px rgba(0, 0, 0, 0.7) !important;
     transform: translateY(-1px);
 }
 
@@ -1394,6 +1397,8 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 /* Suppress bevel lights and remove outlines on all modal & popup buttons */
 .auth-modal .btn::before,
 .auth-modal .btn::after,
+.history-modal .btn::before,
+.history-modal .btn::after,
 .logout-modal-card .btn::before,
 .logout-modal-card .btn::after,
 .logout-modal-actions .btn::before,
@@ -1402,6 +1407,10 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 #sanadaLogoutModal .btn::after,
 #sanadaDeleteKeyModal .btn::before,
 #sanadaDeleteKeyModal .btn::after,
+#sanadaActionPopup .btn::before,
+#sanadaActionPopup .btn::after,
+#sanadaLoadHistoryModal .btn::before,
+#sanadaLoadHistoryModal .btn::after,
 #modalLogoutCancelBtn::before,
 #modalLogoutCancelBtn::after,
 #modalLogoutConfirmBtn::before,
@@ -1409,21 +1418,30 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 #modalDeleteKeyCancelBtn::before,
 #modalDeleteKeyCancelBtn::after,
 #modalDeleteKeyConfirmBtn::before,
-#modalDeleteKeyConfirmBtn::after {
+#modalDeleteKeyConfirmBtn::after,
+#popupCancelBtn::before,
+#popupCancelBtn::after,
+#popupConfirmBtn::before,
+#popupConfirmBtn::after {
     display: none !important;
     content: none !important;
     opacity: 0 !important;
 }
 
 .auth-modal .btn,
+.history-modal .btn,
 .logout-modal-card .btn,
 .logout-modal-actions .btn,
 #sanadaLogoutModal .btn,
 #sanadaDeleteKeyModal .btn,
+#sanadaActionPopup .btn,
+#sanadaLoadHistoryModal .btn,
 #modalLogoutCancelBtn,
 #modalLogoutConfirmBtn,
 #modalDeleteKeyCancelBtn,
-#modalDeleteKeyConfirmBtn {
+#modalDeleteKeyConfirmBtn,
+#popupCancelBtn,
+#popupConfirmBtn {
     border: none !important;
     outline: none !important;
 }
@@ -1451,7 +1469,8 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4) !important;
 }
 
-.btn-modal-confirm-logout {
+.btn-modal-confirm-logout,
+.btn-modal-confirm-danger {
     background: color-mix(in srgb, var(--rose) 28%, #16060a) !important;
     border: none !important;
     outline: none !important;
@@ -1469,13 +1488,72 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
     transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.btn-modal-confirm-logout:hover {
+.btn-modal-confirm-logout:hover,
+.btn-modal-confirm-danger:hover {
     background: color-mix(in srgb, var(--rose) 40%, #1f070e) !important;
     border: none !important;
     outline: none !important;
     color: #ffffff !important;
     transform: translateY(-1.5px);
     box-shadow: 0 6px 24px rgba(225, 29, 72, 0.42) !important;
+}
+
+.btn-modal-confirm-primary {
+    background: #ffffff !important;
+    border: none !important;
+    outline: none !important;
+    color: #000000 !important;
+    border-radius: var(--radius-full);
+    padding: 11px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.btn-modal-confirm-primary:hover {
+    background: #f4f4f5 !important;
+    border: none !important;
+    outline: none !important;
+    color: #000000 !important;
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45) !important;
+}
+
+.logout-modal-actions.single-action {
+    grid-template-columns: 1fr !important;
+}
+
+.popup-input-field {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: var(--radius-full);
+    padding: 11px 18px;
+    color: #ffffff;
+    font-size: 13.5px;
+    text-align: center;
+    outline: none !important;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.popup-input-field:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.popup-input-field:focus {
+    background: rgba(255, 255, 255, 0.09) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    outline: none !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
 @media (max-width: 540px) {

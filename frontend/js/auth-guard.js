@@ -77,6 +77,9 @@ export function setAuth(role, username, extra = {}) {
             role: role,
             username: username || (role === 'developer' ? 'developer' : 'user'),
             id: extra.id || null,
+            email: extra.email || null,
+            created_at: extra.created_at || null,
+            is_demo: Boolean(extra.is_demo),
             timestamp: Date.now()
         }));
     } catch (e) {
@@ -361,7 +364,12 @@ export async function authenticate(username, password, explicitRole) {
             const dbUser = res.user;
             const activeRole = (dbUser.role === 'developer') ? 'developer' : 'user';
 
-            setAuth(activeRole, dbUser.username, { id: dbUser.id });
+            setAuth(activeRole, dbUser.username, {
+                id: dbUser.id,
+                email: dbUser.email,
+                created_at: dbUser.created_at,
+                is_demo: false
+            });
             applyRoleDisplay(activeRole);
             closeAuthModal();
 
@@ -389,7 +397,10 @@ export async function authenticate(username, password, explicitRole) {
 
         const cfg = DEMO_CONFIG[matchedRole];
         if (cfg && u === cfg.username.toLowerCase() && rawPass === cfg.password) {
-            setAuth(cfg.role, cfg.username);
+            setAuth(cfg.role, cfg.username, {
+                is_demo: true,
+                email: `${cfg.username}@sanada.ai`
+            });
             applyRoleDisplay(cfg.role);
             closeAuthModal();
 

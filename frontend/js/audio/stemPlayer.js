@@ -316,8 +316,9 @@ export class StemPlayerMatrix {
             const trackId = String(stem.channel);
             if (!this.firstTrackId) this.firstTrackId = trackId;
 
-            const rawUrl = stem.url || '';
-            const fullUrl = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+            const rawUrl = stem.url || stem.audio_data_url || '';
+            const isAbsolute = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('data:') || rawUrl.startsWith('blob:');
+            const fullUrl = isAbsolute
                 ? rawUrl
                 : `${effectiveBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
 
@@ -328,6 +329,9 @@ export class StemPlayerMatrix {
             const confStr = stem.stem_confidence ? `${(stem.stem_confidence * 100).toFixed(0)}%` : '';
             const stemName = escapeHtml(stem.assigned_tag || stem.filename || `Source ${stem.channel}`);
             const safeFilename = escapeHtml(stem.filename || `stem_${stem.channel}.wav`);
+            const downloadHref = (fullUrl.startsWith('data:') || fullUrl.startsWith('blob:') || fullUrl.startsWith('http'))
+                ? fullUrl
+                : `${effectiveBase}/${fullUrl.replace(/^\//, '')}`;
 
             html += `
                 <div class="stem-strip" id="stemStrip_${trackId}" data-track-id="${trackId}" tabindex="0">
@@ -352,7 +356,7 @@ export class StemPlayerMatrix {
                             <svg class="stem-icon-mute" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
                         </button>
                         <input type="range" class="stem-volume-fader" data-stem-action="volume" data-track-id="${trackId}" min="0" max="1" step="0.01" value="1" title="Volume">
-                        <a href="${fullUrl}" download="${safeFilename}" class="btn-stem-ctrl stem-download-btn" title="Download WAV" aria-label="Download WAV">
+                        <a href="${downloadHref}" download="${safeFilename}" class="btn-stem-ctrl stem-download-btn" title="Download WAV" aria-label="Download WAV">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         </a>
                         <audio class="stem-fallback-audio" id="audioFallback_${trackId}" src="${fullUrl}" preload="none" style="display:none;"></audio>

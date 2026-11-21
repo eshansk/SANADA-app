@@ -144,6 +144,10 @@ export function switchRoute(targetRoute, updateHash = true) {
             console.error('Route listener error:', err);
         }
     });
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sanada:routeChanged', { detail: { route } }));
+    }
 }
 
 export function onRouteChanged(callback) {
@@ -177,7 +181,7 @@ export function initRouter(onRouteChangeCallback) {
         const role = e.detail?.role || 'unauthenticated';
         if (role === 'unauthenticated' && currentRoute !== 'home') {
             switchRoute('home', true);
-        } else if (role === 'user' && !['home', 'predict', 'api'].includes(currentRoute)) {
+        } else if (role === 'user' && !['home', 'predict', 'api', 'account'].includes(currentRoute)) {
             switchRoute('predict', true);
         } else {
             updateNavIndicator();

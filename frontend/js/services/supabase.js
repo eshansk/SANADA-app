@@ -445,6 +445,59 @@ export async function resendOtpWithSupabase(email) {
     }
 }
 
+/**
+ * Changes user password via PostgreSQL RPC change_password.
+ *
+ * @param {string} userIdOrUsername - User UUID or username
+ * @param {string} oldPassword - Current plain-text password
+ * @param {string} newPassword - New plain-text password (min 8 chars)
+ * @returns {Promise<{ success: boolean, message?: string, error?: string }>}
+ */
+export async function changePasswordWithSupabase(userIdOrUsername, oldPassword, newPassword) {
+    const client = getSupabaseClient();
+    if (!client) {
+        return { success: false, error: 'Supabase credentials are not configured.' };
+    }
+    const cleanOld = (oldPassword || '').trim();
+    const cleanNew = (newPassword || '').trim();
+
+    if (!cleanOld || !cleanNew) {
+        return { success: false, error: 'Both current and new passwords are required.' };
+    }
+    if (cleanNew.length < 8) {
+        return { success: false, error: 'New password must be at least 8 characters long.' };
+    }
+    if (cleanOld === cleanNew) {
+        return { success: false, error: 'New password must be different from current password.' };
+    }
+
+    try {
+        const { data, error } = await client.rpc('change_password', {
+            p_user_id: userIdOrUsername,
+            p_old: cleanOld,
+            p_new: cleanNew
+        });
+
+        if (error) {
+            console.error('[SANADA Supabase] change_password error:', error);
+            return { success: false, error: error.message || 'Database error while updating password.' };
+        }
+
+        if (data && data.success === false) {
+            return { success: false, error: data.error || 'Password update failed.' };
+        }
+
+        // Keep Supabase Auth session synchronized if authenticated
+        try {
+            await client.auth.updateUser({ password: cleanNew });
+        } catch (authErr) {}
+
+        return { success: true, message: 'Password updated successfully!' };
+    } catch (err) {
+        return { success: false, error: err?.message || 'Network error updating password.' };
+    }
+}
+
 // =============================================================================
 // 4. CONSOLE CONFIGURATION HELPER
 // =============================================================================

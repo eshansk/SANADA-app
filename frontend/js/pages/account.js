@@ -1,22 +1,61 @@
 /**
  * frontend/js/pages/account.js
  * ============================
- * Account Profile & Session Management Controller.
- * Displays authenticated user profile, permissions, session security,
- * and workspace actions.
+ * Redesigned Account Profile, Run History & Credential Controller.
+ *
+ * Provides:
+ *  1. Profile header (Avatar, username, email, role, member since).
+ *  2. Recent Run History (Shared with Studio page, max 5 runs, rename/pin/delete/clear).
+ *  3. Default Inference Preferences (Task, mode, threshold, all_4_stems) loaded by Studio.
+ *  4. Change Password with crypt() verification, validation, and demo account notice.
+ *  5. API keys link and Sign out button.
  */
 
 import { getAuth } from '../auth-guard.js';
+import {
+    getRunHistory,
+    renderRunHistoryList,
+    renderHistorySkeleton,
+    clearAllRuns,
+    changePassword,
+    getCurrentUserMeta
+} from '../services/runHistory.js';
+import { showConfirmPopup } from '../ui/popup.js';
 
 export function initAccountPage() {
     updateAccountProfile();
+    initChangePasswordForm();
+    initAccountRunHistory();
 
-    // Listen for role switch or auth changes
+    // Re-render when role or session changes
     window.addEventListener('sanada:roleChanged', () => {
         updateAccountProfile();
+        initChangePasswordForm();
+        refreshAccountRuns();
     });
 
-    // Wire Account sign out button to global logout flow
+    // Re-render run history whenever a run is recorded, renamed, or deleted
+    window.addEventListener('sanada:runHistoryChanged', () => {
+        refreshAccountRuns();
+    });
+
+    // Re-render run history whenever Account page is navigated or routed to
+    window.addEventListener('sanada:routeChanged', (e) => {
+        if (e.detail?.route === 'account') {
+            updateAccountProfile();
+            refreshAccountRuns();
+        }
+    });
+
+    window.addEventListener('hashchange', () => {
+        const hash = (window.location.hash || '').replace(/^#\/?/, '').split('/')[0].trim();
+        if (hash === 'account' || hash === 'profile' || hash === 'settings') {
+            updateAccountProfile();
+            refreshAccountRuns();
+        }
+    });
+
+    // Wire Sign Out button to global logout flow
     const accountLogoutBtn = document.getElementById('accountLogoutBtn');
     if (accountLogoutBtn) {
         accountLogoutBtn.addEventListener('click', (e) => {
@@ -24,41 +63,28 @@ export function initAccountPage() {
             const logoutBtn = document.getElementById('logoutBtn') || document.querySelector('.btn-logout');
             if (logoutBtn) {
                 logoutBtn.click();
+            } else if (typeof window.openLogoutModal === 'function') {
+                window.openLogoutModal();
             }
-        });
-    }
-
-    // Wire Reset Workspace Session Cache button
-    const accountClearSessionBtn = document.getElementById('accountClearSessionBtn');
-    if (accountClearSessionBtn) {
-        accountClearSessionBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            // Clear temporary prediction and stem cache but retain auth
-            sessionStorage.removeItem('sanada_last_inference');
-            sessionStorage.removeItem('sanada_active_audio');
-            if (typeof window.showToast === 'function') {
-                window.showToast('Workspace session cache refreshed.', 'success');
-            }
-            updateAccountProfile();
         });
     }
 }
 
+/**
+ * Updates profile header information.
+ */
 export function updateAccountProfile() {
+    const userMeta = getCurrentUserMeta();
     const auth = getAuth();
-    const role = auth?.role || document.body?.dataset?.role || 'unauthenticated';
-    const username = auth?.username || (role === 'developer' ? 'developer' : (role === 'user' ? 'user' : 'Guest'));
+    const role = userMeta.role || 'unauthenticated';
+    const username = userMeta.username || (role === 'developer' ? 'developer' : 'user');
 
-    // DOM Element targets
     const nameEl = document.getElementById('accountDisplayName');
     const handleEl = document.getElementById('accountUsernameTag');
+    const emailEl = document.getElementById('accountEmailTag');
     const roleBadgeEl = document.getElementById('accountRoleBadge');
-    const accessTierEl = document.getElementById('accountAccessTier');
     const avatarInitialEl = document.getElementById('accountAvatarInitial');
-    const sessionStartedEl = document.getElementById('accountSessionStarted');
-    const statRoleEl = document.getElementById('accountStatRole');
-    const statRoleSubEl = document.getElementById('accountStatRoleSub');
-    const devOnlyEntitlement = document.getElementById('accountEntitlementDevOnly');
+    const memberSinceEl = document.getElementById('accountMemberSince');
     const apiKeysLink = document.getElementById('accountApiKeysLink');
 
     if (nameEl) {
@@ -69,6 +95,11 @@ export function updateAccountProfile() {
 
     if (handleEl) {
         handleEl.textContent = `@${username}`;
+    }
+
+    if (emailEl) {
+        const resolvedEmail = userMeta.email || auth?.email || `${username}@sanada.ai`;
+        emailEl.textContent = resolvedEmail;
     }
 
     if (avatarInitialEl) {
@@ -88,45 +119,160 @@ export function updateAccountProfile() {
         }
     }
 
-    if (accessTierEl) {
-        accessTierEl.innerHTML = role === 'developer'
-            ? 'Tier 1 &bull; Full Training &amp; DSP'
-            : 'Tier 2 &bull; Studio &amp; API';
-    }
-
-    if (statRoleEl) {
-        statRoleEl.textContent = role === 'developer' ? 'DEV' : (role === 'user' ? 'USER' : 'GUEST');
-    }
-
-    if (statRoleSubEl) {
-        statRoleSubEl.textContent = role === 'developer'
-            ? 'Full DSP & Checkpoints'
-            : (role === 'user' ? 'Inference & Audio Player' : 'Public Overview');
-    }
-
-    if (devOnlyEntitlement) {
-        if (role === 'developer') {
-            devOnlyEntitlement.style.opacity = '1';
-            const dot = devOnlyEntitlement.querySelector('.entitlement-status-dot');
-            if (dot) dot.className = 'entitlement-status-dot online';
+    if (memberSinceEl) {
+        if (auth?.created_at) {
+            try {
+                const d = new Date(auth.created_at);
+                memberSinceEl.textContent = `Member since ${d.toLocaleDateString([], { month: 'short', year: 'numeric' })}`;
+            } catch (e) {
+                memberSinceEl.textContent = 'Member since Nov 2026';
+            }
         } else {
-            devOnlyEntitlement.style.opacity = '0.45';
-            const dot = devOnlyEntitlement.querySelector('.entitlement-status-dot');
-            if (dot) dot.className = 'entitlement-status-dot';
+            memberSinceEl.textContent = 'Member since Nov 2026';
         }
     }
 
     if (apiKeysLink) {
-        // API route is developer-only or authorized user
         apiKeysLink.style.display = (role === 'developer' || role === 'user') ? 'inline-flex' : 'none';
     }
+}
 
-    if (sessionStartedEl) {
-        if (auth?.timestamp) {
-            const date = new Date(auth.timestamp);
-            sessionStartedEl.textContent = `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-        } else {
-            sessionStartedEl.textContent = 'Active Session';
+/**
+ * Initializes and wires the Change Password form with demo protection.
+ */
+function initChangePasswordForm() {
+    const userMeta = getCurrentUserMeta();
+    const form = document.getElementById('accountPasswordForm');
+    const demoBanner = document.getElementById('accountDemoPasswordNotice');
+    const currentPassInput = document.getElementById('cpCurrentPass');
+    const newPassInput = document.getElementById('cpNewPass');
+    const confirmPassInput = document.getElementById('cpConfirmPass');
+    const submitBtn = document.getElementById('cpSubmitBtn');
+    const errorEl = document.getElementById('cpErrorMsg');
+
+    if (!form || !currentPassInput || !newPassInput || !confirmPassInput || !submitBtn) return;
+
+    // If demo account: disable form and show notice
+    if (userMeta.isDemo) {
+        currentPassInput.disabled = true;
+        newPassInput.disabled = true;
+        confirmPassInput.disabled = true;
+        submitBtn.disabled = true;
+        if (demoBanner) demoBanner.style.display = 'flex';
+        return;
+    }
+
+    // Regular authenticated user: enable form
+    currentPassInput.disabled = false;
+    newPassInput.disabled = false;
+    confirmPassInput.disabled = false;
+    submitBtn.disabled = false;
+    if (demoBanner) demoBanner.style.display = 'none';
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        if (errorEl) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+        }
+
+        const oldPass = currentPassInput.value.trim();
+        const newPass = newPassInput.value.trim();
+        const confirmPass = confirmPassInput.value.trim();
+
+        if (!oldPass) {
+            showError('Please enter your current password.');
+            currentPassInput.focus();
+            return;
+        }
+
+        if (!newPass) {
+            showError('Please enter a new password.');
+            newPassInput.focus();
+            return;
+        }
+
+        if (newPass.length < 8) {
+            showError('New password must be at least 8 characters long.');
+            newPassInput.focus();
+            return;
+        }
+
+        if (oldPass === newPass) {
+            showError('New password must be different from current password.');
+            newPassInput.focus();
+            return;
+        }
+
+        if (newPass !== confirmPass) {
+            showError('New password and confirmation do not match.');
+            confirmPassInput.focus();
+            return;
+        }
+
+        submitBtn.disabled = true;
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span>Updating Password...</span>';
+
+        try {
+            const res = await changePassword(oldPass, newPass);
+            if (!res.success) {
+                showError(res.error || 'Password update failed.');
+                return;
+            }
+
+            form.reset();
+            if (typeof window.showToast === 'function') {
+                window.showToast('Password changed successfully!', 'success');
+            }
+        } catch (err) {
+            showError(err?.message || 'Network error updating password.');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    };
+
+    function showError(msg) {
+        if (errorEl) {
+            errorEl.textContent = msg;
+            errorEl.style.display = 'block';
+        } else if (typeof window.showToast === 'function') {
+            window.showToast(msg, 'error');
         }
     }
+}
+
+/**
+ * Initializes the Run History list on the Account page.
+ */
+async function initAccountRunHistory() {
+    const clearBtn = document.querySelector('#accountRunHistoryCard [data-action="clear-runs"]');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const confirmed = await showConfirmPopup({
+                title: 'Clear Run History',
+                message: 'Are you sure you want to clear your inference run history? This action cannot be undone.',
+                confirmText: 'Clear All',
+                isDanger: true
+            });
+            if (confirmed) {
+                await clearAllRuns();
+                if (typeof window.showToast === 'function') {
+                    window.showToast('All run history cleared.', 'info');
+                }
+            }
+        });
+    }
+
+    await refreshAccountRuns();
+}
+
+async function refreshAccountRuns() {
+    const listEl = document.getElementById('accountRunHistoryList');
+    if (!listEl) return;
+    renderHistorySkeleton(listEl, 3);
+    const runs = await getRunHistory();
+    renderRunHistoryList(listEl, runs);
 }

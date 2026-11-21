@@ -38,12 +38,13 @@ export const API = {
      * Executes Task 1 (Counting), Task 2 (Tagging), and Task 3 (Separation)
      * Supports mode: 'auto' | 'sanada' | 'computer' | 'live_mic'
      */
-    async predictAudio(file, task = 'all', mode = 'auto', all_4_stems = false) {
+    async predictAudio(file, task = 'all', mode = 'auto', all_4_stems = false, threshold = 0.5) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('task', task);
         formData.append('mode', mode);
         formData.append('all_4_stems', all_4_stems ? 'true' : 'false');
+        formData.append('threshold', (typeof threshold === 'number' ? threshold : 0.5).toString());
         const res = await fetch(`${API_BASE}/api/predict`, {
             method: 'POST',
             body: formData
@@ -120,7 +121,7 @@ export const API = {
      */
     getStemUrl(relativeUrl) {
         if (!relativeUrl) return '';
-        if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) return relativeUrl;
+        if (relativeUrl.startsWith('data:') || relativeUrl.startsWith('blob:') || relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) return relativeUrl;
         const clean = relativeUrl.startsWith('/') ? relativeUrl.slice(1) : relativeUrl;
         if (!clean.includes('/')) {
             return `${API_BASE}/static/demos/${clean}`;

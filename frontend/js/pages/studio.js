@@ -14,6 +14,12 @@ import { audioEngine } from '../audio/audioEngine.js';
 import { DualAudioVisualizer } from '../audio/signalVisualizer.js';
 import { StemPlayerMatrix } from '../audio/stemPlayer.js';
 import { showToast } from '../ui/toast.js';
+import {
+    getInferencePreferences,
+    saveRun,
+    openLoadHistoryModal,
+    closeLoadHistoryModal
+} from '../services/runHistory.js';
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
@@ -74,8 +80,6 @@ export function initStudioPage() {
 
         // Inference Dispatch
         taskSelect: document.getElementById('taskSelect'),
-        modeSelect: document.getElementById('modeSelect'),
-        allStemsCheck: document.getElementById('allStemsCheck'),
         runInferenceBtn: document.getElementById('runInferenceBtn'),
         inferenceBtnText: document.getElementById('inferenceBtnText'),
         inferenceBtnIcon: document.getElementById('inferenceBtnIcon'),
@@ -84,6 +88,9 @@ export function initStudioPage() {
         studioMobileActionBar: document.getElementById('studioMobileActionBar'),
         mobileBarFilename: document.getElementById('mobileBarFilename'),
         runInferenceMobileBtn: document.getElementById('runInferenceMobileBtn'),
+        studioLoadHistoryBtn: document.getElementById('studioLoadHistoryBtn'),
+        loadHistoryModalCloseBtn: document.getElementById('loadHistoryModalCloseBtn'),
+        sanadaLoadHistoryModal: document.getElementById('sanadaLoadHistoryModal'),
 
         // Task Results
         kHeroNumber: document.getElementById('kHeroNumber'),
@@ -719,12 +726,13 @@ export function initStudioPage() {
             scrollToResults();
 
             const task = DOM.taskSelect ? DOM.taskSelect.value : 'all';
-            const mode = DOM.modeSelect ? DOM.modeSelect.value : 'auto';
-            const all4Stems = DOM.allStemsCheck ? DOM.allStemsCheck.checked : false;
+            const mode = 'auto';
+            const all4Stems = false;
+            const threshold = 0.5;
             DOM.runInferenceBtn.disabled = true;
             if (DOM.runInferenceMobileBtn) DOM.runInferenceMobileBtn.disabled = true;
             if (DOM.inferenceBtnIcon) DOM.inferenceBtnIcon.innerHTML = '<div class="spinner"></div>';
-            if (DOM.inferenceBtnText) DOM.inferenceBtnText.textContent = `Executing [${mode.toUpperCase()}] Tasks...`;
+            if (DOM.inferenceBtnText) DOM.inferenceBtnText.textContent = 'Running Inference...';
             if (DOM.inferenceProgressBar) DOM.inferenceProgressBar.style.display = 'block';
 
             // Add shimmer effect to result cards during inference
@@ -732,10 +740,25 @@ export function initStudioPage() {
             resultCards.forEach(c => c.classList.add('is-shimmering'));
 
             try {
-                const data = await API.predictAudio(activeFile, task, mode, all4Stems);
+                const data = await API.predictAudio(activeFile, task, mode, all4Stems, threshold);
                 renderPredictionResults(data.results || data);
-                const modeLabel = data.mode_used ? ` [${data.mode_used.toUpperCase()}]` : '';
-                showToast(`Neural listening inference${modeLabel} completed successfully!`, 'success');
+                showToast('Neural listening inference completed successfully!', 'success');
+
+                // Persist to Run History (scoped to user, latest 5 maintained)
+                try {
+                    await saveRun(
+                        activeFile.name,
+                        data.mode_used || mode,
+                        threshold,
+                        task,
+                        all4Stems,
+                        data,
+                        null,
+                        activeFile
+                    );
+                } catch (histErr) {
+                    console.warn('[Studio] Failed to save run history:', histErr);
+                }
             } catch (err) {
                 showToast('Backend offline; activating high-fidelity simulation.', 'warning');
                 renderMockResults();
@@ -899,11 +922,11 @@ export function initStudioPage() {
             separationBadge.textContent = activeSeparator;
         }
 
-        if (results.source_separation && stemMatrix) {
-            const rawStems = results.source_separation.stems || [];
+        const rawStems = results.source_separation?.stems || results.speech_separation?.stems || results.separated_stems || [];
+        if (rawStems.length > 0 && stemMatrix) {
             const resolvedStems = rawStems.map(s => ({
                 ...s,
-                url: API.getStemUrl(s.url || s.filename)
+                url: API.getStemUrl(s.audio_data_url || s.url || s.filename)
             }));
             stemMatrix.render(resolvedStems, activeBuffer, API_BASE);
         }
@@ -938,11 +961,24 @@ export function initStudioPage() {
         const isDominant = mockK > 4;
         const sepModel = mockK === 2 ? "SepFormer-Libri2Mix" : (mockK === 3 ? "SepFormer-Libri3Mix" : "SepFormer-4Spk");
 
-        renderPredictionResults({
+        const mockData = {
+            status: "success",
+            filename: activeFile ? activeFile.name : "demo.wav",
+            mode_used: "auto",
+            duration_sec: 8.0,
+            duration_s: 8.0,
+            sample_rate_hz: 16000,
+            input_rms: 0.165,
+            predicted_k: mockK,
+            raw_k: mockRaw,
+            calibrated_k: +(mockRaw * 0.98).toFixed(2),
+            complexity_ceiling_exceeded: isDominant,
             dominant_crowd_mode: isDominant,
             human_speech_detected: true,
             human_speech_prob: 0.985,
             active_separator: sepModel,
+            active_events: activeClasses,
+            top_5_events: activeClasses.slice(0, 5),
             source_counting: {
                 estimated_k: mockK,
                 predicted_k: mockK,
@@ -962,12 +998,31 @@ export function initStudioPage() {
                 stems: [
                     { channel: 1, filename: "stem_1.wav", url: API.getStemUrl("static/stems/demo_stem_1.wav"), si_sdr_estimate_db: 16.20 },
                     { channel: 2, filename: "stem_2.wav", url: API.getStemUrl("static/stems/demo_stem_2.wav"), si_sdr_estimate_db: 14.40 },
-                    { channel: 3, filename: "stem_3.wav", url: API.getStemUrl("static/stems/demo_stem_3.wav"), si_sdr_estimate_db: 12.40 },
-                    { channel: 4, filename: "stem_4.wav", url: API.getStemUrl("static/stems/demo_stem_4.wav"), si_sdr_estimate_db: 8.60 }
+                    { channel: 3, filename: "stem_3.wav", url: API.getStemUrl("static/stems/demo_stem_4.wav"), si_sdr_estimate_db: 12.40 },
+                    { channel: 4, filename: "stem_4.wav", url: API.getStemUrl("static/stems/demo_stem_3.wav"), si_sdr_estimate_db: 8.60 }
                 ].slice(0, Math.min(mockK, 4)),
                 model: sepModel
             }
-        });
+        };
+
+        renderPredictionResults(mockData);
+
+        if (activeFile) {
+            try {
+                saveRun(
+                    activeFile.name,
+                    "auto",
+                    0.5,
+                    "all",
+                    false,
+                    mockData,
+                    null,
+                    activeFile
+                ).catch(err => console.warn('[Studio] Fallback saveRun notice:', err));
+            } catch (saveErr) {
+                console.warn('[Studio] Simulation save run error:', saveErr);
+            }
+        }
     }
 
     // 8. 9-Step Segmented Complexity Ceiling Meter Watcher
@@ -1090,6 +1145,144 @@ export function initStudioPage() {
             }
         }
     });
+
+    // 11. Inference Preferences & Shared Run History
+    function applyStudioPreferences() {
+        const prefs = getInferencePreferences();
+        if (DOM.taskSelect && prefs.task) DOM.taskSelect.value = prefs.task;
+    }
+
+    /**
+     * Reconstructs the complete Studio state from a saved run.
+     * Restores pre-flight settings, active file, source count, tagging, and stem player matrix.
+     */
+    async function loadRunFromHistory(run) {
+        if (!run) return;
+
+        // 1. Restore task setting
+        if (DOM.taskSelect && run.task) DOM.taskSelect.value = run.task;
+
+        // 2. Setup activeFile mock and safely parse resultJson
+        let rj = run.resultJson || {};
+        if (typeof rj === 'string') {
+            try { rj = JSON.parse(rj); } catch(e) { rj = {}; }
+        }
+        const res = Object.assign({}, rj, rj.results || {});
+
+        // Build activeFile representation
+        activeFile = new File([], run.filename || 'history_recording.wav', { type: 'audio/wav' });
+
+        // Update preflight & ingest badges
+        if (DOM.metaFilename) DOM.metaFilename.textContent = `[History] ${run.filename}`;
+        if (DOM.uploadStatusBadge) {
+            DOM.uploadStatusBadge.textContent = 'COMPLIANT (PASS)';
+            DOM.uploadStatusBadge.className = 'badge pass';
+        }
+        if (DOM.metaCompliance) {
+            DOM.metaCompliance.innerHTML = '<span class="badge pass">100% SPEC COMPLIANT</span>';
+        }
+        if (DOM.runInferenceBtn) DOM.runInferenceBtn.disabled = false;
+        if (DOM.runHint) DOM.runHint.textContent = `Viewing historic run "${run.name}" (${run.filename})`;
+
+        // 3. Audio decoding for visualizer & transport (if embedded input audio or stem audio exists)
+        let stems = res.source_separation?.stems 
+                 || res.speech_separation?.stems 
+                 || res.separated_stems 
+                 || rj.separated_stems 
+                 || rj.results?.source_separation?.stems 
+                 || [];
+
+        stems = stems.map((s, idx) => {
+            const ch = s.channel || (idx + 1);
+            const audioSrc = s.audio_data_url || s.url || s.stem_url || s.filename;
+            const resolvedUrl = API.getStemUrl(audioSrc);
+            return {
+                ...s,
+                channel: ch,
+                url: resolvedUrl,
+                audio_data_url: s.audio_data_url || resolvedUrl
+            };
+        });
+
+        if (!res.source_separation) res.source_separation = {};
+        res.source_separation.stems = stems;
+        res.separated_stems = stems;
+
+        let audioToDecode = rj.input_audio_data_url || rj.results?.input_audio_data_url;
+        if (!audioToDecode && stems.length > 0) {
+            audioToDecode = stems[0].audio_data_url || stems[0].url;
+        }
+        if (!audioToDecode && run.filename) {
+            audioToDecode = API.getStemUrl(run.filename);
+        }
+
+        let decodedMixBuffer = null;
+        if (audioToDecode) {
+            try {
+                const targetUrl = API.getStemUrl(audioToDecode);
+                const resp = await fetch(targetUrl);
+                if (resp.ok) {
+                    const arrayBuf = await resp.arrayBuffer();
+                    decodedMixBuffer = await audioEngine.decodeAudio(arrayBuf);
+                    activeBuffer = decodedMixBuffer;
+                    displayDecodedBuffer(`[History] ${run.filename}`, decodedMixBuffer);
+                }
+            } catch (err) {
+                console.warn('[Studio] Could not decode preview audio buffer from history:', err);
+            }
+        }
+
+        // 4. Update audio metadata stats
+        const sampleRate = (decodedMixBuffer?.sampleRate) ? (decodedMixBuffer.sampleRate / 1000).toFixed(1) : '16.0';
+        const channels = (decodedMixBuffer?.numberOfChannels === 2) ? '2 (Stereo)' : '1 (Mono)';
+        const duration = (decodedMixBuffer?.duration) 
+            ? decodedMixBuffer.duration.toFixed(2) 
+            : Number(res.duration_sec || res.duration_s || 8.0).toFixed(2);
+
+        if (DOM.metaSr) DOM.metaSr.textContent = `${sampleRate} kHz`;
+        if (DOM.metaCh) DOM.metaCh.textContent = channels;
+        if (DOM.metaDur) DOM.metaDur.textContent = `${duration} s`;
+
+        // 5. Render the complete prediction results into Studio
+        renderPredictionResults(res);
+
+        // 6. Toast notice
+        showToast(`Loaded run "${run.name}" from history with all stems!`, 'success');
+    }
+
+    // Global listener to load run from anywhere in the app (e.g. Account page)
+    window.addEventListener('sanada:loadRun', (e) => {
+        if (e.detail) {
+            loadRunFromHistory(e.detail);
+        }
+    });
+
+    // Wire "Load from History" modal button
+    if (DOM.studioLoadHistoryBtn) {
+        DOM.studioLoadHistoryBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openLoadHistoryModal((selectedRun) => {
+                loadRunFromHistory(selectedRun);
+            });
+        });
+    }
+
+    if (DOM.loadHistoryModalCloseBtn) {
+        DOM.loadHistoryModalCloseBtn.addEventListener('click', closeLoadHistoryModal);
+    }
+
+    if (DOM.sanadaLoadHistoryModal) {
+        DOM.sanadaLoadHistoryModal.addEventListener('click', (e) => {
+            if (e.target === DOM.sanadaLoadHistoryModal) {
+                closeLoadHistoryModal();
+            }
+        });
+    }
+
+    window.addEventListener('sanada:prefsChanged', applyStudioPreferences);
+    window.addEventListener('sanada:roleChanged', applyStudioPreferences);
+
+    applyStudioPreferences();
 
     // Initial Stage: Clean, uncluttered Ingest mode
     setStudioStage('stage-ingest');

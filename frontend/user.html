@@ -407,6 +407,10 @@
 
                                     <div class="ingest-controls-stacked">
                                         <button class="btn btn-full" id="browseBtn">Browse Computer</button>
+                                        <button type="button" class="btn btn-full btn-load-history" id="studioLoadHistoryBtn" title="Load past inference run with complete stems and results">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                            <span>Load from History</span>
+                                        </button>
                                         <select class="select-input select-full" id="demoSelect">
                                             <option value="">Select Preloaded Evaluation Audio...</option>
                                             <option value="mix_00000.wav">mix_00000.wav (Org-Mix-4 Variable K=2)</option>
@@ -511,16 +515,6 @@
                                         <option value="tagging">Task 2: Multi-Label Tagging Only</option>
                                         <option value="separating">Task 3: Source Separation Only</option>
                                     </select>
-                                    <select class="select-input select-full" id="modeSelect" style="margin-top: 8px;">
-                                        <option value="auto">Mode: Auto-Detect (Benchmark / Media / Mic)</option>
-                                        <option value="sanada">Mode: SANADA Benchmark (Bit-Exact 16kHz)</option>
-                                        <option value="computer">Mode: Computer Audio / Media (Clean + Norm)</option>
-                                        <option value="live_mic">Mode: Live Microphone (60Hz Cut + VAD + Loudness)</option>
-                                    </select>
-                                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 11px; margin-top: 6px; margin-bottom: 6px; color: var(--text-muted); cursor: pointer;">
-                                        <input type="checkbox" id="allStemsCheck">
-                                        <span>Export All 4 Conv-TasNet Stems</span>
-                                    </label>
                                     <div class="validate-buttons-row">
                                         <button class="btn btn-primary btn-run-inference" id="runInferenceBtn" disabled>
                                             <span id="inferenceBtnIcon"></span>
@@ -732,6 +726,8 @@
                                     </div>
                                 </div>
                             </div>
+
+
                         </div>
                     </div>
 
@@ -753,10 +749,10 @@
                 <section class="view-page" id="pageAccount">
                     <div class="page-header">
                         <h1 class="page-title">Account Profile &amp; Settings</h1>
-                        <p class="page-desc">Manage authenticated identity, session security credentials, role entitlements, and neural inference telemetry.</p>
+                        <p class="page-desc">Manage authenticated identity, session security credentials, default inference preferences, and recent runs.</p>
                     </div>
 
-                    <!-- PROFILE HERO CARD -->
+                    <!-- PROFILE HEADER CARD -->
                     <div class="card account-profile-card">
                         <div class="account-profile-main">
                             <div class="account-avatar-wrapper">
@@ -766,30 +762,26 @@
                             <div class="account-identity">
                                 <div class="account-role-row">
                                     <h2 class="account-name" id="accountDisplayName">User Account</h2>
-                                    <span class="badge badge-user" id="accountRoleBadge">User (Inference Studio)</span>
+                                    <span class="badge" id="accountRoleBadge">User (Inference Studio)</span>
                                 </div>
-                                <div class="account-handle" id="accountUsernameTag">@user</div>
+                                <div class="account-handles-row">
+                                    <span class="account-handle" id="accountUsernameTag">@user</span>
+                                    <span class="account-bullet">&bull;</span>
+                                    <span class="account-email" id="accountEmailTag">user@sanada.ai</span>
+                                </div>
                                 <div class="account-meta-row">
                                     <span class="account-meta-item">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                        Session: <strong id="accountSessionStarted">Active Now</strong>
-                                    </span>
-                                    <span class="account-meta-item">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                                        Platform: <span id="accountPlatform">Linux &bull; Neural Web Engine</span>
-                                    </span>
-                                    <span class="account-meta-item">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                                        Auth: <span>Demo Vault (Local Session)</span>
+                                        <span id="accountMemberSince">Member since Nov 2026</span>
                                     </span>
                                 </div>
                             </div>
                         </div>
 
                         <div class="account-actions-row">
-                            <a href="#/predict" class="btn btn-primary">
-                                <span>Open Studio</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                            <a href="#/api" class="btn btn-ctrl-account" id="accountApiKeysLink">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-1.5 1.5L16 7l-1.5-1.5M19 5l-7 7-1.5-1.5M5 16l-3 3 1 1 2-2 1 1 2-2-1-1 3-3"></path><circle cx="16.5" cy="7.5" r="4.5"></circle></svg>
+                                <span>API Keys</span>
                             </a>
                             <button type="button" class="btn btn-logout" id="accountLogoutBtn">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -798,102 +790,67 @@
                         </div>
                     </div>
 
-                    <!-- STATS TILES -->
-                    <div class="grid-4 account-stats-grid">
-                        <div class="stat-tile">
-                            <div class="stat-number" id="accountStatRole">USER</div>
-                            <div class="stat-label">Access Tier</div>
-                            <div class="stat-sub" id="accountStatRoleSub">Studio &amp; Audio Engine</div>
+                    <!-- LAST 5 RUNS CARD (SHARED RUN HISTORY) -->
+                    <div class="card account-history-card" id="accountRunHistoryCard">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>Recent Run History (Latest 5)</span>
+                            </h2>
+                            <div class="card-header-actions">
+                                <button type="button" class="btn btn-xs btn-history-clear" data-action="clear-runs" title="Clear all runs">Clear All</button>
+                            </div>
                         </div>
-                        <div class="stat-tile">
-                            <div class="stat-number">16 kHz</div>
-                            <div class="stat-label">Model Resolution</div>
-                            <div class="stat-sub">128,000 Mono Samples (8.0s)</div>
-                        </div>
-                        <div class="stat-tile">
-                            <div class="stat-number"><em>K</em> = 1..32</div>
-                            <div class="stat-label">Source Count Capacity</div>
-                            <div class="stat-sub">WavLM-Base+ Regression</div>
-                        </div>
-                        <div class="stat-tile">
-                            <div class="stat-number">15</div>
-                            <div class="stat-label">Multi-Label Classes</div>
-                            <div class="stat-sub">Joint Polyphonic Tagging</div>
+                        <div class="run-history-container" id="accountRunHistoryList">
+                            <!-- Injected via shared runHistory component -->
                         </div>
                     </div>
 
-                    <!-- WORKSPACE PERMISSIONS & SECURITY CARDS -->
-                    <div class="grid-2 account-details-grid">
-                        <!-- ENTITLEMENTS CARD -->
-                        <div class="card">
+                    <!-- SECURITY: CHANGE PASSWORD -->
+                    <div class="account-details-grid">
+                        <!-- CARD: CHANGE PASSWORD -->
+                        <div class="card" id="accountChangePasswordCard">
                             <div class="card-header">
-                                <h2 class="card-title">Granted Workspace Entitlements</h2>
-                                <span class="badge">Active</span>
+                                <h2 class="card-title">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    <span>Change Password</span>
+                                </h2>
+                                <span class="badge">Security</span>
                             </div>
-                            <div class="account-entitlements-list">
-                                <div class="account-entitlement-item">
-                                    <div class="entitlement-status-dot online"></div>
-                                    <div class="entitlement-info">
-                                        <div class="entitlement-name">Source Counting (Task 1)</div>
-                                        <div class="entitlement-desc">Continuous polyphonic regression for active emitter density up to K=32.</div>
+                            <div class="account-form-body">
+                                <!-- Demo account notice banner -->
+                                <div class="account-demo-notice" id="accountDemoPasswordNotice" style="display: none;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                    <div>
+                                        <strong>Demo Account Active:</strong> Password change is disabled for demo accounts. Sign up or log in with your personal Supabase account to update credentials.
                                     </div>
                                 </div>
-                                <div class="account-entitlement-item">
-                                    <div class="entitlement-status-dot online"></div>
-                                    <div class="entitlement-info">
-                                        <div class="entitlement-name">Multi-Label Tagging (Task 2)</div>
-                                        <div class="entitlement-desc">15-class audio event classification with confidence score evaluation.</div>
-                                    </div>
-                                </div>
-                                <div class="account-entitlement-item">
-                                    <div class="entitlement-status-dot online"></div>
-                                    <div class="entitlement-info">
-                                        <div class="entitlement-name">Speech Separation (Task 3)</div>
-                                        <div class="entitlement-desc">Clean speech extraction with interactive 4-stem multitrack visualizer.</div>
-                                    </div>
-                                </div>
-                                <div class="account-entitlement-item">
-                                    <div class="entitlement-status-dot online"></div>
-                                    <div class="entitlement-info">
-                                        <div class="entitlement-name">Neural Studio Inference</div>
-                                        <div class="entitlement-desc">Direct pre-flight validation, microphone recording, and stem extraction.</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        <!-- SESSION SECURITY & ENVIRONMENT CARD -->
-                        <div class="card">
-                            <div class="card-header">
-                                <h2 class="card-title">Session Security &amp; Environment</h2>
-                                <span class="badge">Local Vault</span>
-                            </div>
-                            <table class="data-table account-security-table">
-                                <tr>
-                                    <td class="label">Session Storage</td>
-                                    <td class="val">Isolated Client SessionStorage</td>
-                                </tr>
-                                <tr>
-                                    <td class="label">Role Tier</td>
-                                    <td class="val">User Account (Restricted Portal)</td>
-                                </tr>
-                                <tr>
-                                    <td class="label">DSP Backend</td>
-                                    <td class="val">Uvicorn / FastAPI Neural Inference Engine</td>
-                                </tr>
-                                <tr>
-                                    <td class="label">Audio Engine</td>
-                                    <td class="val">Web Audio API (Float32Array &bull; 16000 Hz)</td>
-                                </tr>
-                                <tr>
-                                    <td class="label">Session Timeout</td>
-                                    <td class="val">Persistent until browser close or manual sign out</td>
-                                </tr>
-                            </table>
-                            <div class="account-security-footer">
-                                <button type="button" class="btn btn-ctrl btn-full" id="accountClearSessionBtn">
-                                    <span>Reset Workspace Session Cache</span>
-                                </button>
+                                <form class="account-password-form" id="accountPasswordForm" autocomplete="off">
+                                    <div class="form-group">
+                                        <label class="form-label" for="cpCurrentPass">Current Password</label>
+                                        <input type="password" class="auth-input" id="cpCurrentPass" placeholder="Enter current password" required autocomplete="current-password">
+                                    </div>
+
+                                    <div class="form-group" style="margin-top: 14px;">
+                                        <label class="form-label" for="cpNewPass">New Password</label>
+                                        <input type="password" class="auth-input" id="cpNewPass" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+                                        <span class="form-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Must be minimum 8 characters and differ from current password.</span>
+                                    </div>
+
+                                    <div class="form-group" style="margin-top: 14px;">
+                                        <label class="form-label" for="cpConfirmPass">Confirm New Password</label>
+                                        <input type="password" class="auth-input" id="cpConfirmPass" placeholder="Re-enter new password" minlength="8" required autocomplete="new-password">
+                                    </div>
+
+                                    <div class="cp-error-box" id="cpErrorMsg" style="display: none;"></div>
+
+                                    <div class="account-form-actions" style="margin-top: 20px;">
+                                        <button type="submit" class="btn btn-primary" id="cpSubmitBtn">
+                                            <span>Update Password</span>
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -942,6 +899,65 @@
                     </svg>
                     <span>Log Out</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- LIQUID GLASS RUN DETAIL DRAWER (SLIDE-OVER)                    -->
+    <!-- ============================================================== -->
+    <aside class="sanada-run-drawer" id="sanadaRunDrawer" aria-hidden="true"></aside>
+    <div class="sanada-drawer-backdrop" id="sanadaDrawerBackdrop"></div>
+
+    <!-- ============================================================== -->
+    <!-- LOAD RUN FROM HISTORY MODAL (STUDIO PICKER)                    -->
+    <!-- ============================================================== -->
+    <div class="auth-modal history-modal" id="sanadaLoadHistoryModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalHistoryTitle">
+        <div class="auth-modal-card history-modal-card">
+            <!-- Close Button -->
+            <button type="button" class="auth-modal-close" id="loadHistoryModalCloseBtn" aria-label="Close modal" title="Close (Esc)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+
+            <h2 class="modal-title" id="modalHistoryTitle">Load Run from History</h2>
+            <p class="modal-subtitle">Select a past run to restore its full inference results, source count, sound tags, and separated stems.</p>
+
+            <div class="modal-body" style="margin-top: 18px; width: 100%;">
+                <div class="modal-history-list" id="studioModalHistoryList">
+                    <!-- Populated dynamically via runHistory service -->
+                </div>
+            </div>
+
+            <div class="modal-footer modal-history-footer">
+                <a href="#/account" class="btn btn-modal-manage-account" id="manageHistoryInAccountLink">
+                    <span>Manage history in Account &rarr;</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- LIQUID GLASS ACTION POPUP (CONFIRM / PROMPT / ALERT)           -->
+    <!-- ============================================================== -->
+    <div class="auth-modal sanada-action-popup-overlay" id="sanadaActionPopup" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="popupTitle">
+        <div class="auth-modal-card logout-modal-card sanada-action-popup-card">
+            <button type="button" class="auth-modal-close" id="popupCloseBtn" aria-label="Close dialog" title="Close (Esc)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <h2 class="modal-title" id="popupTitle">Confirm</h2>
+            <p class="modal-subtitle" id="popupMessage"></p>
+            <div class="popup-input-wrap" id="popupInputWrap" style="display: none; margin-top: 16px;">
+                <input type="text" class="text-input popup-input-field" id="popupInput" placeholder="Enter text...">
+            </div>
+            <div class="logout-modal-actions popup-actions" id="popupActions">
+                <button type="button" class="btn btn-modal-cancel" id="popupCancelBtn"><span>Cancel</span></button>
+                <button type="button" class="btn btn-modal-confirm-primary" id="popupConfirmBtn"><span>Confirm</span></button>
             </div>
         </div>
     </div>
