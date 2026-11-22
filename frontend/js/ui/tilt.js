@@ -11,10 +11,6 @@
 export function initCardTilt() {
     if (typeof window === 'undefined') return;
 
-    // Respect user motion preference
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) return;
-
     const cardSelector = '.card, .stat-tile, .home-task-card, .ceiling-explorer-card, .pipeline-step-card, .auth-card';
     let currentCard = null;
     let rafId = null;
@@ -44,24 +40,38 @@ export function initCardTilt() {
         card.style.setProperty('--card-counter-bevel-x', `${counterShift}%`);
     }
 
-    function resetCard(card) {
+    function resetCard(card, immediate = false) {
         if (!card) return;
         card.classList.remove('is-tapped');
-        card.style.removeProperty('--card-rot-x');
-        card.style.removeProperty('--card-rot-y');
-        card.style.removeProperty('--card-bevel-x');
-        card.style.removeProperty('--card-counter-bevel-x');
-        card.style.transform = '';
+        if (immediate) {
+            card.style.removeProperty('--card-rot-x');
+            card.style.removeProperty('--card-rot-y');
+            card.style.removeProperty('--card-bevel-x');
+            card.style.removeProperty('--card-counter-bevel-x');
+            card.style.transform = '';
+        } else {
+            // Allow CSS transition to gracefully ease back to resting state
+            // before stripping inline custom properties (synced to 0.45s return transition)
+            setTimeout(() => {
+                if (!card.classList.contains('is-tapped')) {
+                    card.style.removeProperty('--card-rot-x');
+                    card.style.removeProperty('--card-rot-y');
+                    card.style.removeProperty('--card-bevel-x');
+                    card.style.removeProperty('--card-counter-bevel-x');
+                    card.style.transform = '';
+                }
+            }, 450);
+        }
     }
 
-    function resetAllCards() {
+    function resetAllCards(immediate = false) {
         if (rafId) {
             cancelAnimationFrame(rafId);
             rafId = null;
         }
         document.querySelectorAll(cardSelector).forEach(c => {
             if (c.classList.contains('is-tapped') || c.style.getPropertyValue('--card-rot-x')) {
-                resetCard(c);
+                resetCard(c, immediate);
             }
         });
         currentCard = null;
@@ -76,7 +86,7 @@ export function initCardTilt() {
         const card = e.target.closest(cardSelector);
         if (!card) {
             if (currentCard) {
-                resetCard(currentCard);
+                resetCard(currentCard, false);
                 currentCard = null;
             }
             return;
@@ -99,7 +109,7 @@ export function initCardTilt() {
         if (isTouchActive || (Date.now() - lastTouchTime < 1000)) return;
         const card = e.target.closest(cardSelector);
         if (card && (!e.relatedTarget || !card.contains(e.relatedTarget))) {
-            resetCard(card);
+            resetCard(card, false);
             if (currentCard === card) currentCard = null;
         }
     }
@@ -115,12 +125,17 @@ export function initCardTilt() {
             touchResetTimer = null;
         }
 
-        // Reset any cards that may currently be in a tilted state
-        resetAllCards();
-
         const touch = e.touches[0];
         const card = e.target.closest(cardSelector);
-        if (!card) return;
+        if (!card) {
+            resetAllCards(false);
+            return;
+        }
+
+        // Reset any previously tapped card immediately so the newly tapped card activates
+        if (currentCard && currentCard !== card) {
+            resetCard(currentCard, true);
+        }
 
         currentCard = card;
         card.classList.add('is-tapped');
@@ -129,14 +144,25 @@ export function initCardTilt() {
 
     function handleTouchMove(e) {
         lastTouchTime = Date.now();
-        if (!e.touches || !e.touches[0] || !currentCard) return;
+        if (!e.touches || !e.touches[0]) return;
         const touch = e.touches[0];
-        const card = currentCard;
 
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => {
-            applyTilt(card, touch.clientX, touch.clientY);
-        });
+        // Track and activate whichever card is currently under the moving finger while scrolling
+        const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+        const card = (targetElement && targetElement.closest) ? (targetElement.closest(cardSelector) || currentCard) : currentCard;
+
+        if (card) {
+            if (currentCard && currentCard !== card) {
+                resetCard(currentCard, false);
+            }
+            currentCard = card;
+            card.classList.add('is-tapped');
+
+            if (rafId) cancelAnimationFrame(rafId);
+            rafId = requestAnimationFrame(() => {
+                applyTilt(card, touch.clientX, touch.clientY);
+            });
+        }
     }
 
     function handleTouchEnd() {
@@ -152,12 +178,8 @@ export function initCardTilt() {
             touchResetTimer = null;
         }
 
-        // When the tap is done, smoothly return cards to their original position
-        // A brief 100ms hold ensures the tactile response is felt, followed by a fluid ease-back
-        touchResetTimer = setTimeout(() => {
-            resetAllCards();
-            touchResetTimer = null;
-        }, 100);
+        // Zero touch release hold delay: immediately begin easing back to flat resting position over 0.45s
+        resetAllCards(false);
     }
 
     function handleTouchCancel() {
@@ -167,15 +189,8 @@ export function initCardTilt() {
             clearTimeout(touchResetTimer);
             touchResetTimer = null;
         }
-        resetAllCards();
+        resetAllCards(false);
     }
-
-    // Cancel tilt immediately if user starts scrolling or switches windows
-    window.addEventListener('scroll', () => {
-        if (currentCard || document.querySelector('.is-tapped')) {
-            resetAllCards();
-        }
-    }, { passive: true });
 
     // Attach passive listeners on document for zero jank & dynamic DOM compatibility
     document.addEventListener('mousemove', handleMouseMove, { passive: true });

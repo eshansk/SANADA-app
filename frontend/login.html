@@ -370,19 +370,55 @@
 
     <!-- UI INTERACTION SCRIPT (Password Visibility Toggle) -->
     <script>
+        var _lastToggleTime = 0;
+        var _lastToggleTarget = null;
+        window.togglePasswordVisibility = function(inputId, btnEl) {
+            var now = Date.now();
+            var targetId = typeof inputId === 'string' ? inputId : (inputId && inputId.id ? inputId.id : '');
+            if (targetId && _lastToggleTarget === targetId && (now - _lastToggleTime) < 250) {
+                return;
+            }
+            _lastToggleTime = now;
+            _lastToggleTarget = targetId;
+
+            var input = typeof inputId === 'string' ? document.getElementById(inputId) : inputId;
+            if (!input) return;
+
+            var btn = btnEl ? (btnEl.closest ? btnEl.closest('button, .password-toggle-btn') : btnEl) : null;
+            if (!btn && input.parentElement) {
+                btn = input.parentElement.querySelector('.password-toggle-btn');
+            }
+
+            var isPass = (input.type === 'password');
+            input.type = isPass ? 'text' : 'password';
+
+            if (btn) {
+                var eyeShow = btn.querySelector('.eye-show');
+                var eyeHide = btn.querySelector('.eye-hide');
+                if (eyeShow) {
+                    eyeShow.style.setProperty('display', isPass ? 'none' : 'block', 'important');
+                }
+                if (hideEye) {
+                    hideEye.style.setProperty('display', isPass ? 'block' : 'none', 'important');
+                }
+                btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+                btn.setAttribute('title', isPass ? 'Hide password' : 'Show password');
+            }
+
+            try {
+                input.focus();
+                var len = input.value.length;
+                input.setSelectionRange(len, len);
+            } catch (e) {}
+        };
+
         (function() {
             var toggleBtn = document.getElementById('passwordToggleBtn');
-            var passwordInput = document.getElementById('passwordInput');
-            if (toggleBtn && passwordInput) {
-                toggleBtn.addEventListener('click', function() {
-                    var isPassword = passwordInput.type === 'password';
-                    passwordInput.type = isPassword ? 'text' : 'password';
-                    var eyeShow = toggleBtn.querySelector('.eye-show');
-                    var eyeHide = toggleBtn.querySelector('.eye-hide');
-                    if (eyeShow) eyeShow.style.display = isPassword ? 'none' : 'block';
-                    if (eyeHide) eyeHide.style.display = isPassword ? 'block' : 'none';
-                    passwordInput.focus();
-                });
+            if (toggleBtn) {
+                toggleBtn.onclick = function(e) {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    window.togglePasswordVisibility('passwordInput', toggleBtn);
+                };
             }
         })();
     </script>

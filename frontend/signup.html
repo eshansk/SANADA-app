@@ -18,21 +18,49 @@
 
     <!-- GLOBAL PASSWORD TOGGLE HELPER -->
     <script>
+        var _lastToggleTime = 0;
+        var _lastToggleTarget = null;
         window.togglePasswordVisibility = function(inputId, btnEl) {
-            var input = document.getElementById(inputId);
-            if (!input) return;
-            var isPass = input.type === 'password';
-            input.type = isPass ? 'text' : 'password';
-            if (btnEl) {
-                var showEye = btnEl.querySelector('.eye-show');
-                var hideEye = btnEl.querySelector('.eye-hide');
-                if (showEye) showEye.style.display = isPass ? 'none' : 'block';
-                if (hideEye) hideEye.style.display = isPass ? 'block' : 'none';
+            var now = Date.now();
+            var targetId = typeof inputId === 'string' ? inputId : (inputId && inputId.id ? inputId.id : '');
+            if (targetId && _lastToggleTarget === targetId && (now - _lastToggleTime) < 250) {
+                return;
             }
-            input.focus();
+            _lastToggleTime = now;
+            _lastToggleTarget = targetId;
+
+            var input = typeof inputId === 'string' ? document.getElementById(inputId) : inputId;
+            if (!input) return;
+
+            var btn = btnEl ? (btnEl.closest ? btnEl.closest('button, .modal-pass-toggle, .password-toggle-btn') : btnEl) : null;
+            if (!btn && input.parentElement) {
+                btn = input.parentElement.querySelector('.modal-pass-toggle, .password-toggle-btn');
+            }
+
+            var isPass = (input.type === 'password');
+            input.type = isPass ? 'text' : 'password';
+
+            if (btn) {
+                var showEye = btn.querySelector('.eye-show');
+                var hideEye = btn.querySelector('.eye-hide');
+                if (showEye) {
+                    showEye.style.setProperty('display', isPass ? 'none' : 'block', 'important');
+                }
+                if (hideEye) {
+                    hideEye.style.setProperty('display', isPass ? 'block' : 'none', 'important');
+                }
+                btn.setAttribute('aria-label', isPass ? 'Hide password' : 'Show password');
+                btn.setAttribute('title', isPass ? 'Hide password' : 'Show password');
+            }
+
+            try {
+                input.focus();
+                var len = input.value.length;
+                input.setSelectionRange(len, len);
+            } catch (e) {}
         };
     </script>
-    <script type="module" src="js/auth-guard.js?v=9"></script>
+    <script type="module" src="js/auth-guard.js?v=10"></script>
 </head>
 <body>
     <div class="app-shell">
@@ -112,13 +140,6 @@
                     <p class="modal-subtitle">Choose your access role to continue.</p>
 
                     <div class="modal-role-selector" role="tablist" aria-label="Select Login Role">
-                        <button type="button" class="role-select-card" id="modalRoleDevBtn" role="tab" aria-selected="false" data-role="developer">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="16 18 22 12 16 6"></polyline>
-                                <polyline points="8 6 2 12 8 18"></polyline>
-                            </svg>
-                            <span>Developer</span>
-                        </button>
                         <button type="button" class="role-select-card active" id="modalRoleUserBtn" role="tab" aria-selected="true" data-role="user">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
@@ -126,12 +147,19 @@
                             </svg>
                             <span>User</span>
                         </button>
+                        <button type="button" class="role-select-card" id="modalRoleDevBtn" role="tab" aria-selected="false" data-role="developer">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                            </svg>
+                            <span>Developer</span>
+                        </button>
                     </div>
 
                     <form class="modal-login-form" id="modalLoginForm" autocomplete="on">
                         <div class="auth-field">
-                            <label class="auth-label" for="modalUsernameInput" id="modalUsernameLabel">Username</label>
-                            <input type="text" id="modalUsernameInput" name="username" class="auth-input" placeholder="Enter username" autocomplete="username" required>
+                            <label class="auth-label" for="modalUsernameInput" id="modalUsernameLabel">Username or Email</label>
+                            <input type="text" id="modalUsernameInput" name="username" class="auth-input" placeholder="Enter username or email" autocomplete="username" required>
                         </div>
                         <div class="auth-field">
                             <label class="auth-label" for="modalPasswordInput">Password</label>

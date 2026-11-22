@@ -10,6 +10,13 @@
 --  4. RPC: change_password with crypt() verification and double-hash prevention
 -- =============================================================================
 
+-- -----------------------------------------------------------------------------
+-- 0. Drop any broken triggers on auth.users (fixes "Database error saving new user")
+-- -----------------------------------------------------------------------------
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user() cascade;
+drop function if exists public.handle_new_auth_user() cascade;
+
 create extension if not exists pgcrypto;
 
 -- -----------------------------------------------------------------------------
@@ -285,52 +292,10 @@ create trigger trg_auto_hash_password
 -- -----------------------------------------------------------------------------
 -- 10. Procedure: Change Password
 -- -----------------------------------------------------------------------------
--- Overload 1: UUID user id
-create or replace function public.change_password(
-    p_user_id uuid,
-    p_old text,
-    p_new text
-) returns json language plpgsql security definer as $$
-declare
-    v_user public.app_users%rowtype;
-    clean_old text := trim(coalesce(p_old, ''));
-    clean_new text := trim(coalesce(p_new, ''));
-begin
-    -- 1. Find user by id
-    select * into v_user from public.app_users where id = p_user_id;
-    if v_user.id is null then
-        return json_build_object('success', false, 'error', 'User account not found.');
-    end if;
+-- Drop legacy UUID overload to prevent PostgREST ambiguous candidate function error:
+drop function if exists public.change_password(uuid, text, text);
 
-    -- 2. Verify current password
-    if v_user.password is null or v_user.password <> crypt(clean_old, v_user.password) then
-        return json_build_object('success', false, 'error', 'Current password is incorrect.');
-    end if;
-
-    -- 3. Validate new password length (minimum 8 characters)
-    if length(clean_new) < 8 then
-        return json_build_object('success', false, 'error', 'New password must be at least 8 characters long.');
-    end if;
-
-    -- 4. Validate that new password differs from current
-    if clean_old = clean_new then
-        return json_build_object('success', false, 'error', 'New password must be different from current password.');
-    end if;
-
-    -- 5. Update password
-    -- Because trg_auto_hash_password checks for existing bcrypt hashes, setting plain
-    -- clean_new triggers exactly one bcrypt hash without double-hashing.
-    update public.app_users
-    set password = clean_new
-    where id = p_user_id;
-
-    return json_build_object('success', true, 'message', 'Password updated successfully.');
-exception when others then
-    return json_build_object('success', false, 'error', SQLERRM);
-end;
-$$;
-
--- Overload 2: Text user id / username for flexible client callers
+-- Single unified change_password RPC supporting both UUID IDs and username strings:
 create or replace function public.change_password(
     p_user_id text,
     p_old text,
@@ -380,6 +345,38 @@ exception when others then
 end;
 $$;
 
+-- Helper procedure: Safe User Profile lookup (returns email and metadata)
+create or replace function public.get_user_profile(
+    p_user_id text
+) returns table (
+    user_id uuid,
+    username text,
+    role text,
+    email text,
+    created_at timestamptz
+) language plpgsql security definer as $$
+declare
+    v_uid uuid;
+begin
+    begin
+        v_uid := p_user_id::uuid;
+        return query
+        select u.id, u.username, u.role, u.email, u.created_at
+        from public.app_users u
+        where u.id = v_uid;
+        if found then return; end if;
+    exception when others then
+    end;
+
+    return query
+    select u.id, u.username, u.role, u.email, u.created_at
+    from public.app_users u
+    where lower(trim(u.username)) = lower(trim(p_user_id))
+       or (u.email is not null and lower(trim(u.email)) = lower(trim(p_user_id)))
+    limit 1;
+end;
+$$;
+
 -- -----------------------------------------------------------------------------
 -- 11. Grant Permissions
 -- -----------------------------------------------------------------------------
@@ -388,8 +385,9 @@ grant execute on function public.get_run_history(uuid, text) to anon, authentica
 grant execute on function public.rename_run_history(uuid, text, uuid, text) to anon, authenticated, service_role;
 grant execute on function public.delete_run_history(uuid, uuid, text) to anon, authenticated, service_role;
 grant execute on function public.clear_run_history(uuid, text) to anon, authenticated, service_role;
-grant execute on function public.change_password(uuid, text, text) to anon, authenticated, service_role;
 grant execute on function public.change_password(text, text, text) to anon, authenticated, service_role;
+grant execute on function public.get_user_profile(text) to anon, authenticated, service_role;
+grant select (id, username, email, role, created_at) on public.app_users to anon, authenticated, service_role;
 
 -- -----------------------------------------------------------------------------
 -- 12. Cleanup (User preferences table/functions are deprecated & removed)
@@ -409,3 +407,145 @@ drop function if exists public.get_user_preferences cascade;
 -- create policy "Allow public stem downloads"
 -- on storage.objects for select
 -- using (bucket_id = 'sanada-stems');
+
+-- -----------------------------------------------------------------------------
+-- 14. Account Registration & Uniqueness Enforcement
+-- -----------------------------------------------------------------------------
+-- Strict case-insensitive uniqueness constraints on public.app_users
+create unique index if not exists idx_app_users_lower_username
+    on public.app_users (lower(trim(username)));
+
+create unique index if not exists idx_app_users_lower_email
+    on public.app_users (lower(trim(email)))
+    where email is not null and email <> '';
+
+-- Helper RPC: Check username & email availability before sending OTP
+create or replace function public.check_user_availability(
+    p_username text,
+    p_email text
+) returns json language plpgsql security definer as $$
+declare
+    clean_user text := lower(trim(coalesce(p_username, '')));
+    clean_mail text := lower(trim(coalesce(p_email, '')));
+begin
+    -- 1. Check reserved usernames
+    if clean_user in ('developer', 'user', 'guest', 'admin', 'root', 'sanada', 'system', 'api') then
+        return json_build_object(
+            'available', false,
+            'field', 'username',
+            'error', 'The username "' || clean_user || '" is reserved. Please choose another.'
+        );
+    end if;
+
+    -- 2. Check username collision (case-insensitive) in public.app_users
+    if clean_user <> '' then
+        if exists (select 1 from public.app_users where lower(trim(username)) = clean_user) then
+            return json_build_object(
+                'available', false,
+                'field', 'username',
+                'error', 'Username is already taken. Please choose a different username.'
+            );
+        end if;
+    end if;
+
+    -- 3. Check email collision (case-insensitive) in public.app_users
+    if clean_mail <> '' then
+        if exists (select 1 from public.app_users where lower(trim(coalesce(email, ''))) = clean_mail) then
+            return json_build_object(
+                'available', false,
+                'field', 'email',
+                'error', 'An account with this email already exists. Please sign in instead.'
+            );
+        end if;
+    end if;
+
+    -- 4. Check auth.users if accessible
+    begin
+        if clean_mail <> '' and exists (select 1 from auth.users where lower(trim(email)) = clean_mail) then
+            return json_build_object(
+                'available', false,
+                'field', 'email',
+                'error', 'An account with this email already exists. Please sign in instead.'
+            );
+        end if;
+        if clean_user <> '' and exists (select 1 from auth.users where lower(trim(raw_user_meta_data->>'username')) = clean_user) then
+            return json_build_object(
+                'available', false,
+                'field', 'username',
+                'error', 'Username is already taken. Please choose a different username.'
+            );
+        end if;
+    exception when others then
+        -- Ignore auth.users schema access restrictions if not granted
+    end;
+
+    return json_build_object('available', true);
+end;
+$$;
+
+-- Procedure to register verified user into public.app_users with strict duplicate prevention
+drop function if exists public.register_verified_user(text, text, text);
+
+create or replace function public.register_verified_user(
+    p_username text,
+    p_password text,
+    p_email text default null
+) returns json language plpgsql security definer as $$
+declare
+    new_id uuid;
+    clean_user text := trim(p_username);
+    clean_mail text := lower(trim(coalesce(p_email, '')));
+    existing_id uuid;
+begin
+    if lower(clean_user) in ('developer', 'user', 'guest', 'admin', 'root', 'sanada', 'system', 'api') then
+        return json_build_object('success', false, 'error', 'The username "' || clean_user || '" is reserved.');
+    end if;
+
+    -- Check if username is taken by a DIFFERENT email
+    if exists (
+        select 1 from public.app_users
+        where lower(trim(username)) = lower(clean_user)
+          and (clean_mail = '' or email is null or lower(trim(email)) <> clean_mail)
+    ) then
+        return json_build_object('success', false, 'error', 'Username is already taken. Please choose a different username.');
+    end if;
+
+    -- If record exists for this email, update credentials
+    if clean_mail <> '' then
+        select id into existing_id
+        from public.app_users
+        where lower(trim(coalesce(email, ''))) = clean_mail
+        limit 1;
+
+        if existing_id is not null then
+            update public.app_users
+            set username = clean_user,
+                password = p_password,
+                role = 'user'
+            where id = existing_id;
+
+            return json_build_object('success', true, 'user_id', existing_id, 'username', clean_user, 'role', 'user');
+        end if;
+    end if;
+
+    insert into public.app_users (username, password, role, email)
+    values (clean_user, p_password, 'user', nullif(clean_mail, ''))
+    returning id into new_id;
+
+    return json_build_object('success', true, 'user_id', new_id, 'username', clean_user, 'role', 'user');
+exception
+    when unique_violation then
+        if clean_mail <> '' then
+            update public.app_users
+            set username = clean_user, password = p_password, role = 'user'
+            where lower(trim(coalesce(email, ''))) = clean_mail;
+            return json_build_object('success', true, 'username', clean_user, 'role', 'user');
+        end if;
+        return json_build_object('success', false, 'error', 'An account with this username or email already exists.');
+    when others then
+        return json_build_object('success', false, 'error', SQLERRM);
+end;
+$$;
+
+grant execute on function public.check_user_availability(text, text) to anon, authenticated, service_role;
+grant execute on function public.register_verified_user(text, text, text) to anon, authenticated, service_role;

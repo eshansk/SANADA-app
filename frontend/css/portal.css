@@ -458,6 +458,9 @@ html[data-role="user"] #pingBtn {
     -webkit-backdrop-filter: blur(32px) saturate(160%) !important;
     border: none !important;
     outline: none !important;
+    overflow: hidden !important;
+    -webkit-mask-image: -webkit-radial-gradient(white, black) !important;
+    mask-image: radial-gradient(white, black) !important;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(0, 0, 0, 0.25) !important;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
@@ -1407,6 +1410,8 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 #sanadaLogoutModal .btn::after,
 #sanadaDeleteKeyModal .btn::before,
 #sanadaDeleteKeyModal .btn::after,
+#sanadaDeleteAccountModal .btn::before,
+#sanadaDeleteAccountModal .btn::after,
 #sanadaActionPopup .btn::before,
 #sanadaActionPopup .btn::after,
 #sanadaLoadHistoryModal .btn::before,
@@ -1419,6 +1424,10 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 #modalDeleteKeyCancelBtn::after,
 #modalDeleteKeyConfirmBtn::before,
 #modalDeleteKeyConfirmBtn::after,
+#modalDeleteAccountCancelBtn::before,
+#modalDeleteAccountCancelBtn::after,
+#modalDeleteAccountConfirmBtn::before,
+#modalDeleteAccountConfirmBtn::after,
 #popupCancelBtn::before,
 #popupCancelBtn::after,
 #popupConfirmBtn::before,
@@ -1434,16 +1443,127 @@ html[data-role="user"] .nav-tabs .tab-link[data-route="paper"] {
 .logout-modal-actions .btn,
 #sanadaLogoutModal .btn,
 #sanadaDeleteKeyModal .btn,
+#sanadaDeleteAccountModal .btn,
 #sanadaActionPopup .btn,
 #sanadaLoadHistoryModal .btn,
 #modalLogoutCancelBtn,
 #modalLogoutConfirmBtn,
 #modalDeleteKeyCancelBtn,
 #modalDeleteKeyConfirmBtn,
+#modalDeleteAccountCancelBtn,
+#modalDeleteAccountConfirmBtn,
+#accountDeleteAccountBtn,
 #popupCancelBtn,
 #popupConfirmBtn {
     border: none !important;
     outline: none !important;
+}
+
+/* Danger Zone button on account card - exact match to website red/rose button styling (translucent liquid glass, no glow) */
+.btn-danger-action,
+#accountDeleteAccountBtn {
+    position: relative !important;
+    overflow: hidden !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    min-height: 44px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff !important;
+    background: color-mix(in srgb, var(--rose) 24%, rgba(18, 5, 8, 0.65)) !important;
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border: none !important;
+    outline: none !important;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    box-shadow: none !important;
+    transition: transform 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Top light bevel reflection */
+.btn-danger-action::before,
+#accountDeleteAccountBtn::before {
+    content: '' !important;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 2% !important;
+    width: 36% !important;
+    height: 1.4px !important;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.28) 20%,
+        rgba(255, 255, 255, 0.85) 45%,
+        rgba(255, 255, 255, 0.25) 75%,
+        transparent 100%
+    ) !important;
+    box-shadow: 0 1px 4px rgba(255, 255, 255, 0.35) !important;
+    border-radius: 9999px !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+    transform: translateX(0%) !important;
+    transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease !important;
+    opacity: 0.65 !important;
+}
+
+/* No background change on hover; sweep bevel and tactile lift */
+.btn-danger-action:hover,
+#accountDeleteAccountBtn:hover {
+    background: color-mix(in srgb, var(--rose) 24%, rgba(18, 5, 8, 0.65)) !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
+    transform: translateY(-1.5px);
+    box-shadow: none !important;
+}
+
+.btn-danger-action:hover::before,
+#accountDeleteAccountBtn:hover::before {
+    transform: translateX(155%) !important;
+    opacity: 0.90 !important;
+}
+
+.btn-danger-action:active,
+.btn-danger-action:focus,
+.btn-danger-action:focus-visible,
+#accountDeleteAccountBtn:active,
+#accountDeleteAccountBtn:focus,
+#accountDeleteAccountBtn:focus-visible {
+    background: color-mix(in srgb, var(--rose) 24%, rgba(18, 5, 8, 0.65)) !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    transform: translateY(0);
+}
+
+#modalDeleteAccountConfirmBtn:active,
+#modalDeleteAccountConfirmBtn:focus,
+#modalDeleteAccountConfirmBtn:focus-visible {
+    border: none !important;
+    outline: none !important;
+    box-shadow: 0 4px 20px rgba(225, 29, 72, 0.45) !important;
+}
+
+/* Compact height for Danger Zone card on Account page (prevents stretching) */
+.account-danger-card {
+    align-self: start !important;
+}
+
+.account-danger-card .account-form-body {
+    padding-top: 10px !important;
+    padding-bottom: 20px !important;
+}
+
+.account-danger-card p {
+    margin-bottom: 16px !important;
+    font-size: 13px !important;
+    line-height: 1.55 !important;
+    color: var(--text-secondary);
 }
 
 .btn-modal-cancel {

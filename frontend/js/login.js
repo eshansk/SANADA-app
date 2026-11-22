@@ -9,7 +9,7 @@
 // DEMO CREDENTIALS CONFIGURATION
 // NOTE: Front-end demo authentication. Replace with backend auth in production.
 // =============================================================================
-import { initCardTilt } from './ui/tilt.js';
+import { initCardTilt } from './ui/tilt.js?v=18';
 
 export const DEMO_CONFIG = {
     developer: {

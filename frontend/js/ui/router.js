@@ -73,7 +73,7 @@ export function switchRoute(targetRoute, updateHash = true) {
         // Unauthenticated access restricted to landing page
         route = 'home';
         if (typeof window !== 'undefined' && typeof window.openAuthModal === 'function') {
-            window.openAuthModal('developer');
+            window.openAuthModal('user');
         }
     } else if (role === 'user' && !['home', 'predict', 'api', 'account'].includes(route)) {
         // User access restricted to Home, Studio, Web API, and Account; unauthorized routes redirect to home page

@@ -618,7 +618,7 @@ export async function changePassword(oldPassword, newPassword) {
 
     try {
         const { data, error } = await client.rpc('change_password', {
-            p_user_id: userMeta.id || userMeta.username,
+            p_user_id: String(userMeta.id || userMeta.username || ''),
             p_old: cleanOld,
             p_new: cleanNew
         });

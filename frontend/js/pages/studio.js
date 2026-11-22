@@ -131,6 +131,11 @@ export function initStudioPage() {
                     });
                 });
             }
+            if (stage === 'stage-results') {
+                requestAnimationFrame(() => {
+                    syncStudioCardsHeight();
+                });
+            }
         }
     }
 
@@ -712,6 +717,9 @@ export function initStudioPage() {
                 </div>
             `;
         }
+        requestAnimationFrame(() => {
+            syncStudioCardsHeight();
+        });
     }
 
     // 7. Inference Dispatch (Online + Offline Fallback)
@@ -771,6 +779,23 @@ export function initStudioPage() {
                 resultCards.forEach(c => c.classList.remove('is-shimmering'));
             }
         });
+    }
+
+    function syncStudioCardsHeight() {
+        const countCard = document.getElementById('studioCountingCard');
+        const tagCard = document.getElementById('studioTaggingCard');
+        if (!countCard || !tagCard) return;
+
+        if (window.innerWidth > 980) {
+            const countH = countCard.offsetHeight;
+            if (countH > 100) {
+                tagCard.style.maxHeight = `${countH}px`;
+                tagCard.style.height = `${countH}px`;
+            }
+        } else {
+            tagCard.style.maxHeight = '';
+            tagCard.style.height = '';
+        }
     }
 
     function animateCountUp(el, targetVal, duration = 400) {
@@ -914,6 +939,9 @@ export function initStudioPage() {
                 });
             }
             DOM.probBarsContainer.innerHTML = probHtml;
+            requestAnimationFrame(() => {
+                syncStudioCardsHeight();
+            });
         }
 
         // Task 3: Source Separation Stems Matrix
@@ -1283,6 +1311,18 @@ export function initStudioPage() {
     window.addEventListener('sanada:roleChanged', applyStudioPreferences);
 
     applyStudioPreferences();
+
+    // Setup dynamic height sync between Source Count & Active Tags cards
+    if (typeof ResizeObserver !== 'undefined') {
+        const countCard = document.getElementById('studioCountingCard');
+        if (countCard) {
+            const ro = new ResizeObserver(() => {
+                syncStudioCardsHeight();
+            });
+            ro.observe(countCard);
+        }
+    }
+    window.addEventListener('resize', syncStudioCardsHeight);
 
     // Initial Stage: Clean, uncluttered Ingest mode
     setStudioStage('stage-ingest');

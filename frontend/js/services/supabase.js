@@ -154,11 +154,45 @@ export async function loginWithSupabase(usernameOrEmail, password) {
 
         if (!error && Array.isArray(data) && data.length > 0) {
             const match = data[0];
+            let userEmail = match.email || null;
+            let createdAt = null;
+
+            // Fetch actual email from get_user_profile RPC or app_users table
+            try {
+                const { data: prof } = await client.rpc('get_user_profile', {
+                    p_user_id: String(match.user_id || match.id || cleanUser)
+                });
+                if (Array.isArray(prof) && prof.length > 0 && prof[0].email) {
+                    userEmail = prof[0].email;
+                    if (prof[0].created_at) createdAt = prof[0].created_at;
+                }
+            } catch (pErr) {}
+
+            if (!userEmail) {
+                try {
+                    const { data: userData } = await client
+                        .from('app_users')
+                        .select('email, created_at')
+                        .eq('id', match.user_id || match.id)
+                        .maybeSingle();
+                    if (userData) {
+                        if (userData.email) userEmail = userData.email;
+                        if (userData.created_at) createdAt = userData.created_at;
+                    }
+                } catch (uErr) {}
+            }
+
+            if (!userEmail && cleanUser.includes('@')) {
+                userEmail = cleanUser;
+            }
+
             return {
                 success: true,
                 user: {
                     id: match.user_id || match.id || null,
                     username: match.username,
+                    email: userEmail,
+                    created_at: createdAt,
                     role: (match.role || 'user').toLowerCase()
                 }
             };
@@ -243,6 +277,14 @@ export async function signUpWithSupabase(username, email, password) {
         return { success: false, error: 'Username can only contain letters, numbers, underscores, and hyphens.' };
     }
 
+    const RESERVED_USERNAMES = ['developer', 'user', 'guest', 'admin', 'root', 'sanada', 'system', 'api'];
+    if (RESERVED_USERNAMES.includes(cleanUser.toLowerCase())) {
+        return {
+            success: false,
+            error: `The username "${cleanUser}" is reserved. Please choose a different username.`
+        };
+    }
+
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
         return { success: false, error: 'Please enter a valid email address.' };
     }
@@ -252,6 +294,55 @@ export async function signUpWithSupabase(username, email, password) {
     }
     if (cleanPass.length < 6) {
         return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+
+    // 1. Availability check via RPC check_user_availability (enforcing case-insensitive uniqueness)
+    try {
+        const { data: avail, error: availErr } = await client.rpc('check_user_availability', {
+            p_username: cleanUser,
+            p_email: cleanEmail
+        });
+        if (!availErr && avail && avail.available === false) {
+            return {
+                success: false,
+                error: avail.error || (avail.field === 'email'
+                    ? 'An account with this email already exists. Please sign in instead.'
+                    : 'Username is already taken. Please choose a different username.')
+            };
+        }
+    } catch (e) {
+        // Proceed to direct table check fallback if RPC not installed yet
+    }
+
+    // 2. Direct table fallback check on public.app_users (case-insensitive)
+    try {
+        const { data: uMatch } = await client
+            .from('app_users')
+            .select('id, username')
+            .ilike('username', cleanUser)
+            .maybeSingle();
+
+        if (uMatch) {
+            return {
+                success: false,
+                error: 'Username is already taken. Please choose a different username.'
+            };
+        }
+
+        const { data: eMatch } = await client
+            .from('app_users')
+            .select('id, email')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+
+        if (eMatch) {
+            return {
+                success: false,
+                error: 'An account with this email already exists. Please sign in instead.'
+            };
+        }
+    } catch (tblErr) {
+        console.warn('[SANADA Supabase] Availability check notice:', tblErr);
     }
 
     try {
@@ -273,7 +364,23 @@ export async function signUpWithSupabase(username, email, password) {
             if (error.status === 429 || errStr.includes('rate limit')) {
                 friendlyMsg = 'Email rate limit reached. Please wait a short moment before requesting another code.';
             } else if (errStr.includes('already registered')) {
+                // Check if user is in public.app_users:
+                // If NOT in public.app_users, they never finished OTP verification!
+                // Resend OTP code so they can verify and complete registration!
+                try {
+                    const resendRes = await resendOtpWithSupabase(cleanEmail);
+                    if (resendRes.success) {
+                        return {
+                            success: true,
+                            email: cleanEmail,
+                            username: cleanUser,
+                            resend: true
+                        };
+                    }
+                } catch (rErr) {}
                 friendlyMsg = 'An account with this email already exists. Please sign in instead.';
+            } else if (errStr.includes('database error saving new user')) {
+                friendlyMsg = 'Database trigger error on auth.users. Please run the SQL fix in Supabase to drop on_auth_user_created.';
             } else if (errStr.includes('invalid') && errStr.includes('email')) {
                 friendlyMsg = 'Please enter a valid email address (disposable email domains are blocked by Supabase).';
             }
@@ -283,8 +390,39 @@ export async function signUpWithSupabase(username, email, password) {
             };
         }
 
-        // If identities is an empty array, the user already exists in auth.users
+        // If identities is an empty array, the user exists in auth.users
         if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+            // Check if user already completed verification in public.app_users
+            let userInApp = false;
+            try {
+                const { data: appUser } = await client
+                    .from('app_users')
+                    .select('id')
+                    .ilike('email', cleanEmail)
+                    .maybeSingle();
+                if (appUser) userInApp = true;
+            } catch (uErr) {}
+
+            if (userInApp) {
+                return {
+                    success: false,
+                    error: 'An account with this email already exists. Please sign in instead.'
+                };
+            }
+
+            // User exists in auth.users as unconfirmed, but not in public.app_users.
+            // Resend OTP code so they can complete registration!
+            const resendRes = await resendOtpWithSupabase(cleanEmail);
+            if (resendRes.success) {
+                return {
+                    success: true,
+                    user: data.user,
+                    email: cleanEmail,
+                    username: cleanUser,
+                    resend: true
+                };
+            }
+
             return {
                 success: false,
                 error: 'An account with this email already exists. Please sign in instead.'
@@ -378,11 +516,17 @@ export async function verifyOtpWithSupabase(email, token, username, password) {
         // Sync into public.app_users via RPC if available
         if (password) {
             try {
-                await client.rpc('register_verified_user', {
+                const regRes = await client.rpc('register_verified_user', {
                     p_username: resolvedUsername,
                     p_password: password,
                     p_email: cleanEmail
                 });
+                if (regRes && regRes.data && regRes.data.success === false) {
+                    return {
+                        success: false,
+                        error: regRes.data.error || 'Username is already taken. Please choose another username.'
+                    };
+                }
             } catch (rpcErr) {
                 console.info('[SANADA Supabase] register_verified_user notice:', rpcErr?.message || rpcErr);
             }
@@ -473,7 +617,7 @@ export async function changePasswordWithSupabase(userIdOrUsername, oldPassword, 
 
     try {
         const { data, error } = await client.rpc('change_password', {
-            p_user_id: userIdOrUsername,
+            p_user_id: String(userIdOrUsername || ''),
             p_old: cleanOld,
             p_new: cleanNew
         });
@@ -495,6 +639,81 @@ export async function changePasswordWithSupabase(userIdOrUsername, oldPassword, 
         return { success: true, message: 'Password updated successfully!' };
     } catch (err) {
         return { success: false, error: err?.message || 'Network error updating password.' };
+    }
+}
+
+/**
+ * Permanently deletes the user account, verifying credentials via password.
+ * Removes user records from public.app_users, api_keys, run_history, and auth.users.
+ *
+ * @param {string} userIdOrUsername - User UUID or username
+ * @param {string} password - Current plain-text password for confirmation
+ * @returns {Promise<{ success: boolean, message?: string, error?: string }>}
+ */
+export async function deleteUserAccountWithSupabase(userIdOrUsername, password) {
+    const client = getSupabaseClient();
+    if (!client) {
+        return { success: false, error: 'Supabase credentials are not configured.' };
+    }
+
+    const cleanPass = (password || '').trim();
+    if (!cleanPass) {
+        return { success: false, error: 'Please enter your password to confirm account deletion.' };
+    }
+
+    const userIdent = String(userIdOrUsername || '').trim();
+    if (!userIdent) {
+        return { success: false, error: 'User identifier not provided.' };
+    }
+
+    const DEMO_NAMES = ['developer', 'user', 'admin'];
+    if (DEMO_NAMES.includes(userIdent.toLowerCase())) {
+        return { success: false, error: 'Built-in demo accounts cannot be deleted.' };
+    }
+
+    try {
+        // 1. Try PostgreSQL delete_user_account RPC
+        const { data, error } = await client.rpc('delete_user_account', {
+            p_user_id: userIdent,
+            p_password: cleanPass
+        });
+
+        if (!error && data) {
+            if (data.success === false) {
+                return { success: false, error: data.error || 'Account deletion failed.' };
+            }
+            return { success: true, message: data.message || 'Account deleted successfully.' };
+        }
+
+        // 2. Fallback: verify password via authenticate_user RPC then delete records
+        const authCheck = await client.rpc('authenticate_user', {
+            p_username: userIdent,
+            p_password: cleanPass
+        });
+
+        if (authCheck.error || !Array.isArray(authCheck.data) || authCheck.data.length === 0) {
+            return { success: false, error: 'Incorrect password. Account deletion aborted.' };
+        }
+
+        // Clean up linked data
+        try {
+            await client.from('api_keys').delete().ilike('user_identifier', userIdent);
+            await client.from('run_history').delete().ilike('user_identifier', userIdent);
+        } catch (subErr) {}
+
+        const { error: delErr } = await client
+            .from('app_users')
+            .delete()
+            .ilike('username', userIdent);
+
+        if (delErr) {
+            return { success: false, error: delErr.message || 'Failed to delete user account.' };
+        }
+
+        return { success: true, message: 'Account deleted successfully.' };
+    } catch (err) {
+        console.error('[SANADA Supabase] deleteUserAccount error:', err);
+        return { success: false, error: err?.message || 'Network error while attempting account deletion.' };
     }
 }
 
@@ -523,6 +742,8 @@ if (typeof window !== 'undefined') {
         signUp: signUpWithSupabase,
         verifyOtp: verifyOtpWithSupabase,
         resendOtp: resendOtpWithSupabase,
+        changePassword: changePasswordWithSupabase,
+        deleteAccount: deleteUserAccountWithSupabase,
         getSupabaseUrl,
         getSupabaseKey
     };

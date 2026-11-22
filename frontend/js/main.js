@@ -15,7 +15,7 @@ if (typeof window !== 'undefined') {
 }
 import { initRouter, switchRoute } from './ui/router.js';
 import { initHomeVideo, updateWaveVisibility } from './ui/homeVideo.js?v=6';
-import { initCardTilt } from './ui/tilt.js';
+import { initCardTilt } from './ui/tilt.js?v=18';
 import { initHomePage } from './pages/home.js';
 import { initStudioPage } from './pages/studio.js?v=3';
 import { initResultsPage, loadAnalytics } from './pages/results.js';

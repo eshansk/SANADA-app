@@ -947,6 +947,7 @@
         display: grid !important;
         grid-template-columns: 5fr 7fr;
         gap: 20px;
+        align-items: stretch;
         width: 100%;
         animation: studioReveal 0.25s ease-out;
     }
@@ -1063,10 +1064,46 @@
         flex-direction: column;
     }
 
-    #probBarsContainer {
-        flex: 1;
+    /* Active tags card: matches counting card height naturally, never expands, internal scroll */
+    #studioTaggingCard {
         display: flex;
         flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    #probBarsContainer {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 6px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+    }
+
+    #probBarsContainer::-webkit-scrollbar {
+        width: 5px;
+    }
+
+    #probBarsContainer::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    #probBarsContainer::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 9999px;
+    }
+
+    #probBarsContainer::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.35);
+    }
+
+    #probBarsContainer:has(.ghost-empty-state) {
         justify-content: center;
     }
 
@@ -1327,6 +1364,42 @@
     /* -------------------------------------------------------------------------
        PAGE 4: ANALYTICS / RESULTS (#pageAnalytics)
        ------------------------------------------------------------------------- */
+    #pageAnalytics .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 24px;
+        align-items: stretch;
+    }
+
+    #pageAnalytics .grid-2 > .card {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 0;
+    }
+
+    #pageAnalytics .data-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: auto;
+        border-collapse: collapse;
+    }
+
+    #pageAnalytics .data-table th,
+    #pageAnalytics .data-table td {
+        padding: 10px 12px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+    #pageAnalytics .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 0;
+        padding-bottom: 4px;
+    }
+
     .chart-card {
         background: var(--bg-1);
         border: 1px solid var(--border-tint);
@@ -1642,7 +1715,16 @@
     .navbar .nav-inner {
         width: 100%;
         max-width: 1240px;
+        overflow: hidden !important;
+        -webkit-mask-image: -webkit-radial-gradient(white, black) !important;
+        mask-image: radial-gradient(white, black) !important;
         pointer-events: auto;
+    }
+    .navbar .nav-inner::before {
+        left: 36px !important;
+        width: min(34%, 130px) !important;
+        max-width: calc(100% - 72px) !important;
+        transform: translateX(0%) !important;
     }
     .nav-toggle {
         display: flex;
@@ -1712,8 +1794,9 @@
         content: '';
         position: absolute;
         top: 0;
-        left: 1.2%;
-        width: 32%;
+        left: 28px !important;
+        width: min(34%, 130px) !important;
+        max-width: calc(100% - 56px) !important;
         height: 1.4px;
         background: linear-gradient(
             90deg,
@@ -1949,8 +2032,8 @@
         margin-bottom: 8px;
     }
 
-    .table-responsive .data-table,
-    .corpora-table {
+    .corpora-table,
+    .data-table-wide {
         min-width: 660px;
         width: 100%;
     }
@@ -1973,6 +2056,9 @@
     }
     .studio-results-row {
         grid-template-columns: 1fr;
+    }
+    #studioTaggingCard {
+        max-height: 440px;
     }
     #stemsContainer {
         width: 100%;
