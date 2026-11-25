@@ -734,7 +734,8 @@ export function initStudioPage() {
             scrollToResults();
 
             const task = DOM.taskSelect ? DOM.taskSelect.value : 'all';
-            const mode = 'auto';
+            const isMicCapture = Boolean(activeFile && activeFile.name && activeFile.name.startsWith('mic_capture_'));
+            const mode = (DOM.modeSelect && DOM.modeSelect.value) ? DOM.modeSelect.value : (isMicCapture ? 'live_mic' : 'auto');
             const all4Stems = false;
             const threshold = null;
             DOM.runInferenceBtn.disabled = true;
@@ -748,7 +749,9 @@ export function initStudioPage() {
             resultCards.forEach(c => c.classList.add('is-shimmering'));
 
             try {
-                const data = await API.predictAudio(activeFile, task, mode, all4Stems, threshold);
+                const data = (mode === 'live_mic')
+                    ? await API.predictLiveAudio(activeFile, all4Stems)
+                    : await API.predictAudio(activeFile, task, mode, all4Stems, threshold);
                 renderPredictionResults(data.results || data);
                 showToast('Neural listening inference completed successfully!', 'success');
 
@@ -798,11 +801,11 @@ export function initStudioPage() {
         }
     }
 
-    function animateCountUp(el, targetVal, duration = 400) {
+    function animateCountUp(el, targetVal, duration = 400, isDominantCrowd = false) {
         const target = parseInt(targetVal, 10);
         if (isNaN(target)) {
             el.textContent = targetVal;
-            updateSegmentedMeter(targetVal);
+            updateSegmentedMeter(targetVal, isDominantCrowd, true);
             return;
         }
         const startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -812,13 +815,13 @@ export function initStudioPage() {
             const progress = Math.min(1, elapsed / duration);
             const current = Math.floor(progress * target);
             el.textContent = current;
-            updateSegmentedMeter(current);
+            updateSegmentedMeter(current, isDominantCrowd, true);
             if (progress < 1) {
                 if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(step);
                 else setTimeout(() => step(), 16);
             } else {
                 el.textContent = target;
-                updateSegmentedMeter(target);
+                updateSegmentedMeter(target, isDominantCrowd, true);
             }
         }
         if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(step);
@@ -847,8 +850,8 @@ export function initStudioPage() {
 
         // Task 1: Source Counting
         if (DOM.kHeroNumber) {
-            animateCountUp(DOM.kHeroNumber, dispK);
-            updateSegmentedMeter(dispK, dominantCrowdMode);
+            animateCountUp(DOM.kHeroNumber, dispK, 400, dominantCrowdMode);
+            updateSegmentedMeter(dispK, dominantCrowdMode, true);
             if (DOM.kHeroSub) {
                 const confVal = count.confidence !== undefined ? (count.confidence * 100).toFixed(1) : '94.5';
                 DOM.kHeroSub.textContent = `Confidence: ${confVal}%`;
@@ -896,7 +899,8 @@ export function initStudioPage() {
                     }
                     verifiedTags.push({ name, prob: Number(prob) });
                 });
-            } else if (humanSpeechDetected || dispK > 0) {
+            }
+            if (humanSpeechDetected || dispK > 0) {
                 for (let spk = 1; spk <= dispK; spk++) {
                     const sName = `Speaker ${spk}`;
                     let prob = classProbMap[sName] || classProbMap[`Speaker_${dispK}_${spk}`] || (0.96 - (spk - 1) * 0.03);
@@ -1067,7 +1071,7 @@ export function initStudioPage() {
     }
 
     // 8. 9-Step Segmented Complexity Ceiling Meter Watcher
-    function updateSegmentedMeter(kVal, isDominantCrowd = false) {
+    function updateSegmentedMeter(kVal, isDominantCrowd = false, hasInference = false) {
         if (!DOM.segmentedMeter || !DOM.gaugeLabel || !DOM.gaugeDot) return;
         if (DOM.segmentedMeter.classList.contains('skeleton-meter')) return;
         const k = parseInt(kVal, 10);
@@ -1078,7 +1082,12 @@ export function initStudioPage() {
             });
             DOM.gaugeDot.className = 'status-dot';
             DOM.gaugeDot.style.background = '';
-            DOM.gaugeLabel.textContent = 'Awaiting inference prediction to evaluate Complexity Ceiling';
+            if (k === 0 && hasInference) {
+                DOM.gaugeDot.style.background = '#ffffff';
+                DOM.gaugeLabel.innerHTML = '<strong>K = 0 (Pure Environmental / Silence)</strong>: No speech talkers detected; routing environmental events through CLAPSep-LoRA.';
+            } else {
+                DOM.gaugeLabel.textContent = 'Awaiting inference prediction to evaluate Complexity Ceiling';
+            }
             return;
         }
 
@@ -1096,21 +1105,20 @@ export function initStudioPage() {
         } else if (k === 4) {
             DOM.gaugeDot.className = 'status-dot';
             DOM.gaugeDot.style.background = '#ffffff';
-            DOM.gaugeLabel.innerHTML = `<strong>K = 4 (Ceiling Boundary)</strong>: Speech separation usable (~4.2 dB SI-SDR); near breakdown limit.`;
-        } else if (isDominantCrowd) {
+            DOM.gaugeLabel.innerHTML = '<strong>K = 4 (Pure K=4 Specialist)</strong>: Dedicated MossFormer2-4Spk separation (+6.50 dB SI-SDR).';
+        } else if (isDominantCrowd || k > 4) {
             DOM.gaugeDot.className = 'status-dot';
             DOM.gaugeDot.style.background = '#ffffff';
-            DOM.gaugeLabel.innerHTML = `<strong>K = ${k} (Dominant-4 Mode):</strong> Extracting top 4 dominant speakers via ConvTasNetSkip-H512.`;
-        } else {
-            DOM.gaugeDot.className = 'status-dot';
-            DOM.gaugeDot.style.background = '#ffffff';
-            DOM.gaugeLabel.innerHTML = `<strong>K = ${k} (Ceiling Exceeded):</strong> High source density (${k} speakers/sources). Intractable mixture beyond K=4 ceiling.`;
+            DOM.gaugeLabel.innerHTML = `<strong>K = ${k} (Recursive OR-PIT Mode):</strong> Extracting all ${k} speakers via MossFormer2 O(K) recursive peeling.`;
         }
     }
 
     if (DOM.kHeroNumber) {
         const observer = new MutationObserver(() => {
-            updateSegmentedMeter(DOM.kHeroNumber.textContent.trim());
+            const txt = DOM.kHeroNumber.textContent.trim();
+            if (/^\d+$/.test(txt)) {
+                updateSegmentedMeter(txt, parseInt(txt, 10) >= 5, true);
+            }
         });
         observer.observe(DOM.kHeroNumber, { childList: true, characterData: true, subtree: true });
     }

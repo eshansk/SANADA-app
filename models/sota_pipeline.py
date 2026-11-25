@@ -1931,6 +1931,7 @@ class SANADASOTAPipeline:
 
         # Defaults (overridden by Session A+, Session B, and Session F configs)
         self.cutpoints = list(DEFAULT_CUTPOINTS)
+        self.fast_cpu_cutpoints = list(DEFAULT_CUTPOINTS)
         self.class_names = list(FSD_32_CLASSES)
         self.clean_k0_thresholds = list(DEFAULT_PER_CLASS_THRESHOLDS)
         self.per_class_thresholds = list(DEFAULT_PER_CLASS_THRESHOLDS)
@@ -2000,6 +2001,10 @@ class SANADASOTAPipeline:
                 if "global_threshold" in f_cfg:
                     self.global_threshold = float(f_cfg["global_threshold"])
                 ap_cfg = f_cfg.get("session_a_plus", {})
+                if ap_cfg.get("fast_cpu_cutpoints") and len(ap_cfg["fast_cpu_cutpoints"]) == 9:
+                    self.fast_cpu_cutpoints = [float(c) for c in ap_cfg["fast_cpu_cutpoints"]]
+                elif "cutpoints" in f_cfg:
+                    self.fast_cpu_cutpoints = [float(c) for c in f_cfg["cutpoints"]]
                 self.density_gate_k = float(ap_cfg.get("density_gate_k_threshold", self.density_gate_k))
                 self.density_gate_span = float(ap_cfg.get("density_gate_blend_span", self.density_gate_span))
                 self.clean_env_gate_db = float(ap_cfg.get("clean_env_gate_db", self.clean_env_gate_db))
@@ -2180,7 +2185,8 @@ class SANADASOTAPipeline:
             pure_env_dominance_db=self.pure_env_dominance_db,
             rms_floor=self.speech_rms_floor,
         )
-        pred_k = int(np.clip(np.digitize(k_cont, np.asarray(self.cutpoints, dtype=np.float64)), 0, 9))
+        active_cuts = self.fast_cpu_cutpoints if fast_cpu else self.cutpoints
+        pred_k = int(np.clip(np.digitize(k_cont, np.asarray(active_cuts, dtype=np.float64)), 0, 9))
         confidence = round(float(np.clip(1.0 - abs(k_cont - pred_k) * 0.45, 0.50, 0.99)), 4)
 
         return {
@@ -2505,6 +2511,9 @@ class SANADASOTAPipeline:
         os.makedirs(output_dir, exist_ok=True)
         session_id = file_prefix or f"session_{uuid.uuid4().hex[:8]}"
         env_np = self._to_fixed_np(env_stem)
+
+        if not active_class_ids and not is_clean_k0:
+            return {"e2_active": False, "env_stems": []}
 
         if not self.has_e2 or not active_class_ids:
             fname = f"{session_id}_env_stem.wav"

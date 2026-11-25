@@ -204,8 +204,8 @@ export function initDeveloperPage() {
 
             logTerminal(`[SAVE] Serializing PyTorch model checkpoint (${exportData.version})...`);
             try {
-                const res = await API.saveModel(exportData);
-                logTerminal(`[COMPLETE] Checkpoint saved successfully: ${res.checkpoint_path}`);
+                const res = await API.saveModel(exportData.task, exportData.version, exportData.notes);
+                logTerminal(`[COMPLETE] Checkpoint saved successfully: ${res.export_filename || res.download_url || res.checkpoint_path}`);
                 showToast('Model checkpoint exported (.pt)', 'success');
             } catch (err) {
                 logTerminal(`[COMPLETE] Simulation Checkpoint serialized: checkpoints/${exportData.task}_${exportData.version}.pt`);
