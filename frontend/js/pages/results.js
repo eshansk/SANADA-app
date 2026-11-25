@@ -1,14 +1,11 @@
 /**
  * frontend/js/pages/results.js
  * ============================
- * Analytics & Benchmark Comparison Page Logic.
- * Hydrates empirical results tables, summary tiles, and mathematically scaled
- * dynamic SVG charts from /api/stats with robust fallback to PATH_B_FALLBACK_BENCHMARKS
- * and PAPER_BENCHMARKS (never empty).
+ * Analytics & Benchmark Comparison Page Logic (SOTA Wave 1-4 + Paper Baseline).
  */
 
 import { API } from '../services/api.js';
-import { PAPER_BENCHMARKS, PATH_B_FALLBACK_BENCHMARKS } from '../data/paperBenchmarks.js';
+import { PAPER_BENCHMARKS, PATH_B_FALLBACK_BENCHMARKS, SOTA_WAVE4_FALLBACK_BENCHMARKS } from '../data/paperBenchmarks.js';
 import { ChartHelper } from '../ui/charts.js';
 
 export async function loadAnalytics() {
@@ -28,40 +25,25 @@ export async function loadAnalytics() {
         taggingChartContainer: document.getElementById('taggingChartContainer')
     };
 
-    // Render verified Path B fallback benchmarks immediately so charts and tables are never blank
-    const defaultSisdr = PATH_B_FALLBACK_BENCHMARKS.separationSisdr.results;
-    const defaultCounting = PATH_B_FALLBACK_BENCHMARKS.counting.results;
-    const defaultTagging = PATH_B_FALLBACK_BENCHMARKS.tagging.results;
+    const defaultSisdr = SOTA_WAVE4_FALLBACK_BENCHMARKS.separationSisdr.results;
+    const defaultCounting = SOTA_WAVE4_FALLBACK_BENCHMARKS.counting.results;
+    const defaultTagging = SOTA_WAVE4_FALLBACK_BENCHMARKS.tagging.results;
 
-    if (DOM.sisdrTableBody) {
-        DOM.sisdrTableBody.innerHTML = ChartHelper.renderSisdrRows(defaultSisdr);
-    }
-    if (DOM.countingTableBody) {
-        DOM.countingTableBody.innerHTML = ChartHelper.renderCountingRows(defaultCounting);
-    }
-    if (DOM.taggingTableBody) {
-        DOM.taggingTableBody.innerHTML = ChartHelper.renderTaggingRows(defaultTagging);
-    }
+    if (DOM.sisdrTableBody) DOM.sisdrTableBody.innerHTML = ChartHelper.renderSisdrRows(defaultSisdr);
+    if (DOM.countingTableBody) DOM.countingTableBody.innerHTML = ChartHelper.renderCountingRows(defaultCounting);
+    if (DOM.taggingTableBody) DOM.taggingTableBody.innerHTML = ChartHelper.renderTaggingRows(defaultTagging);
 
-    if (DOM.sisdrChartContainer) {
-        ChartHelper.renderSisdrChart(DOM.sisdrChartContainer, defaultSisdr);
-    }
-    if (DOM.countingChartContainer) {
-        ChartHelper.renderCountingChart(DOM.countingChartContainer, defaultCounting);
-    }
-    if (DOM.taggingChartContainer) {
-        ChartHelper.renderTaggingChart(DOM.taggingChartContainer, defaultTagging);
-    }
+    if (DOM.sisdrChartContainer) ChartHelper.renderSisdrChart(DOM.sisdrChartContainer, defaultSisdr);
+    if (DOM.countingChartContainer) ChartHelper.renderCountingChart(DOM.countingChartContainer, defaultCounting);
+    if (DOM.taggingChartContainer) ChartHelper.renderTaggingChart(DOM.taggingChartContainer, defaultTagging);
 
-    // Populate pure speech rejection from fallback initially
-    if (PATH_B_FALLBACK_BENCHMARKS.pure_speech_rejection) {
-        const psr = PATH_B_FALLBACK_BENCHMARKS.pure_speech_rejection;
+    if (SOTA_WAVE4_FALLBACK_BENCHMARKS.pure_speech_rejection) {
+        const psr = SOTA_WAVE4_FALLBACK_BENCHMARKS.pure_speech_rejection;
         if (DOM.statPureSpeechTile) DOM.statPureSpeechTile.style.display = 'block';
         if (DOM.statPureSpeechRejection) DOM.statPureSpeechRejection.textContent = `${psr.speech_detection_accuracy_pct}%`;
         if (DOM.statPureSpeechSub) DOM.statPureSpeechSub.textContent = `${psr.speech_false_positive_rate_pct}% False Pos Rate`;
     }
 
-    // Try fetching live statistics from backend API
     try {
         const data = await API.getStats();
 
@@ -78,16 +60,17 @@ export async function loadAnalytics() {
             DOM.statClippingGain.textContent = '-3.0 dBFS';
         }
 
-        // Display pure speech rejection metric when present from API
-        const psr = data.path_b_benchmarks?.pure_speech_rejection || data.pathb_benchmarks?.pure_speech_rejection || PATH_B_FALLBACK_BENCHMARKS.pure_speech_rejection;
+        const psr = data.path_b_benchmarks?.pure_speech_rejection
+            || data.pathb_benchmarks?.pure_speech_rejection
+            || SOTA_WAVE4_FALLBACK_BENCHMARKS.pure_speech_rejection;
         if (psr) {
             if (DOM.statPureSpeechTile) DOM.statPureSpeechTile.style.display = 'block';
             if (DOM.statPureSpeechRejection) DOM.statPureSpeechRejection.textContent = `${psr.speech_detection_accuracy_pct}%`;
             if (DOM.statPureSpeechSub) DOM.statPureSpeechSub.textContent = `${psr.speech_false_positive_rate_pct}% False Pos Rate`;
         }
 
-        if (data.complexity_ceiling_benchmarks) {
-            const b = data.complexity_ceiling_benchmarks;
+        const b = data.sota_benchmarks || data.complexity_ceiling_benchmarks;
+        if (b) {
             if (DOM.sisdrTableBody && b.source_separation_sisdr_db) {
                 DOM.sisdrTableBody.innerHTML = ChartHelper.renderSisdrRows(b.source_separation_sisdr_db);
             }
@@ -97,7 +80,6 @@ export async function loadAnalytics() {
             if (DOM.taggingTableBody && b.multi_label_tagging_asl) {
                 DOM.taggingTableBody.innerHTML = ChartHelper.renderTaggingRows(b.multi_label_tagging_asl);
             }
-
             if (DOM.sisdrChartContainer && b.source_separation_sisdr_db) {
                 ChartHelper.renderSisdrChart(DOM.sisdrChartContainer, b.source_separation_sisdr_db);
             }
@@ -109,7 +91,7 @@ export async function loadAnalytics() {
             }
         }
     } catch (err) {
-        // Backend offline; already populated from verified PATH_B_FALLBACK_BENCHMARKS
+        // Backend offline; already populated from verified SOTA_WAVE4_FALLBACK_BENCHMARKS
     }
 }
 

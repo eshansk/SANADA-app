@@ -1,0 +1,328 @@
+{
+  "updated_at": "2026-11-25T09:44:08Z",
+  "session": "sessionF_master_end_to_end_integration_v6_verified",
+  "smoke_test": false,
+  "elapsed_minutes": 64.66,
+  "peak_gpu_vram_gb": 2.56,
+  "strict_reload_verified_models": 13,
+  "validation_calibration": {
+    "session_a_plus": {
+      "raw_only": {
+        "exact_acc_pct": 74.18,
+        "relaxed_acc_pct": 97.33,
+        "mae": 0.3499,
+        "n_clips": 337
+      },
+      "e1_only": {
+        "exact_acc_pct": 71.51,
+        "relaxed_acc_pct": 97.33,
+        "mae": 0.3626,
+        "n_clips": 337
+      },
+      "smart_gated_pre_cuts": {
+        "exact_acc_pct": 76.85,
+        "relaxed_acc_pct": 99.11,
+        "mae": 0.3072,
+        "n_clips": 337
+      },
+      "smart_gated_calibrated": {
+        "exact_acc_pct": 79.82,
+        "relaxed_acc_pct": 99.41,
+        "mae": 0.3072,
+        "n_clips": 337
+      },
+      "per_domain_calibrated": {
+        "clean_org": {
+          "exact_acc_pct": 79.31,
+          "relaxed_acc_pct": 99.01,
+          "mae": 0.316,
+          "n_clips": 203
+        },
+        "hybrid": {
+          "exact_acc_pct": 75.47,
+          "relaxed_acc_pct": 100.0,
+          "mae": 0.3716,
+          "n_clips": 106
+        },
+        "k0": {
+          "exact_acc_pct": 100.0,
+          "relaxed_acc_pct": 100.0,
+          "mae": 0.0,
+          "n_clips": 28
+        }
+      },
+      "fast_cpu_calibrated": {
+        "exact_acc_pct": 79.53,
+        "relaxed_acc_pct": 99.11,
+        "mae": 0.3051,
+        "n_clips": 337
+      }
+    },
+    "session_b_on_e1": {
+      "val_e1_active_micro_f1": 0.8143,
+      "val_e1_zero_env_false_alarm_pct": 0.0,
+      "val_e1_noisy_pure_speech_fa_pct": 0.0
+    },
+    "c2_use_mixproj": false,
+    "d_use_hybrid_c1": false,
+    "d_use_e1_prefilter": true
+  },
+  "blind_suites": {
+    "s1_org4": {
+      "counting": {
+        "exact_acc_pct": 96.97,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.1141,
+        "n_clips": 99
+      },
+      "tagging": {
+        "macro_map": 0.0,
+        "macro_f1": 0.0,
+        "micro_f1": 0.0,
+        "n_clips": 99,
+        "zero_env_false_alarm_pct": 1.01
+      },
+      "counting_raw_reference": {
+        "exact_acc_pct": 96.97,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.1138,
+        "n_clips": 99
+      }
+    },
+    "s2_org9": {
+      "counting": {
+        "exact_acc_pct": 66.67,
+        "relaxed_acc_pct": 95.83,
+        "mae": 0.4046,
+        "n_clips": 96
+      },
+      "tagging": {
+        "macro_map": 0.0,
+        "macro_f1": 0.0,
+        "micro_f1": 0.0,
+        "n_clips": 96,
+        "zero_env_false_alarm_pct": 0.0
+      },
+      "counting_raw_reference": {
+        "exact_acc_pct": 69.79,
+        "relaxed_acc_pct": 95.83,
+        "mae": 0.4046,
+        "n_clips": 96
+      },
+      "per_k_exact_pct": {
+        "2": 91.7,
+        "3": 83.3,
+        "4": 58.3,
+        "5": 50.0,
+        "6": 58.3,
+        "7": 41.7,
+        "8": 66.7,
+        "9": 83.3
+      }
+    },
+    "s3_pure_env": {
+      "counting": {
+        "exact_acc_pct": 100.0,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.0007,
+        "n_clips": 48
+      },
+      "tagging": {
+        "macro_map": 0.9411,
+        "macro_f1": 0.8341,
+        "micro_f1": 0.8652,
+        "n_clips": 48
+      },
+      "env_separation": {
+        "blind_tp_env_si_sdr_db": 4.77,
+        "blind_tp_env_si_sdri_db": 8.07,
+        "tp_count": 122,
+        "fn_missed_count": 22,
+        "fp_count_from_b": 16,
+        "fp_rejected_by_e2_gate_pct": 50.0,
+        "fp_mean_suppression_db": -16.21,
+        "per_m_si_sdr_db": {
+          "M2": 8.75,
+          "M3": 5.12,
+          "M4": 2.34
+        }
+      }
+    },
+    "s4_hyb_low": {
+      "counting": {
+        "exact_acc_pct": 81.25,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.2235,
+        "n_clips": 32
+      },
+      "tagging": {
+        "macro_map": 0.981,
+        "macro_f1": 0.864,
+        "micro_f1": 0.9167,
+        "n_clips": 32
+      },
+      "speech_separation": {
+        "e1_speech_stem_si_sdr_db": 15.59,
+        "blind_matched_si_sdr_db": 10.45,
+        "blind_exact_k_si_sdr_db": 12.14,
+        "oracle_k_si_sdr_db": 10.23,
+        "blind_exact_k_spkid_pct": 84.7,
+        "n_exact_k_clips": 26,
+        "n_clean_e1_bypass": 0,
+        "n_total_speech_clips": 32
+      },
+      "env_separation": {
+        "blind_tp_env_si_sdr_db": 5.67,
+        "blind_tp_env_si_sdri_db": 5.51,
+        "tp_count": 55,
+        "fn_missed_count": 8,
+        "fp_count_from_b": 2,
+        "fp_rejected_by_e2_gate_pct": 50.0,
+        "fp_mean_suppression_db": -17.31
+      }
+    },
+    "s5_hyb_high": {
+      "counting": {
+        "exact_acc_pct": 72.0,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.4921,
+        "n_clips": 25
+      },
+      "tagging": {
+        "macro_map": 0.9139,
+        "macro_f1": 0.7041,
+        "micro_f1": 0.7105,
+        "n_clips": 25
+      },
+      "speech_separation": {
+        "e1_speech_stem_si_sdr_db": 12.66,
+        "blind_matched_si_sdr_db": -0.68,
+        "blind_exact_k_si_sdr_db": -0.32,
+        "oracle_k_si_sdr_db": -0.69,
+        "blind_exact_k_spkid_pct": 48.3,
+        "n_exact_k_clips": 18,
+        "n_clean_e1_bypass": 0,
+        "n_total_speech_clips": 25
+      },
+      "env_separation": {
+        "blind_tp_env_si_sdr_db": 3.93,
+        "blind_tp_env_si_sdri_db": 2.95,
+        "tp_count": 27,
+        "fn_missed_count": 10,
+        "fp_count_from_b": 12,
+        "fp_rejected_by_e2_gate_pct": 25.0,
+        "fp_mean_suppression_db": -12.46
+      }
+    },
+    "s6_livemic": {
+      "counting": {
+        "exact_acc_pct": 94.44,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.1584,
+        "n_clips": 36
+      },
+      "tagging": {
+        "macro_map": 0.915,
+        "macro_f1": 0.7963,
+        "micro_f1": 0.8378,
+        "n_clips": 36,
+        "zero_env_false_alarm_pct": 0.0
+      },
+      "speech_separation": {
+        "e1_speech_stem_si_sdr_db": 15.27,
+        "blind_matched_si_sdr_db": 8.19,
+        "blind_exact_k_si_sdr_db": 8.65,
+        "oracle_k_si_sdr_db": 8.1,
+        "blind_exact_k_spkid_pct": 78.7,
+        "n_exact_k_clips": 34,
+        "n_clean_e1_bypass": 12,
+        "n_total_speech_clips": 36
+      },
+      "env_separation": {
+        "blind_tp_env_si_sdr_db": 4.22,
+        "blind_tp_env_si_sdri_db": 1.99,
+        "tp_count": 31,
+        "fn_missed_count": 5,
+        "fp_count_from_b": 7,
+        "fp_rejected_by_e2_gate_pct": 28.6,
+        "fp_mean_suppression_db": -10.48
+      }
+    },
+    "s7_silence": {
+      "counting": {
+        "exact_acc_pct": 100.0,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.0,
+        "n_clips": 15
+      },
+      "tagging": {
+        "macro_map": 0.0,
+        "macro_f1": 0.0,
+        "micro_f1": 0.0,
+        "n_clips": 15,
+        "zero_env_false_alarm_pct": 0.0
+      }
+    },
+    "s7_pure_sp": {
+      "counting": {
+        "exact_acc_pct": 100.0,
+        "relaxed_acc_pct": 100.0,
+        "mae": 0.0995,
+        "n_clips": 24
+      },
+      "tagging": {
+        "macro_map": 0.0,
+        "macro_f1": 0.0,
+        "micro_f1": 0.0,
+        "n_clips": 24,
+        "zero_env_false_alarm_pct": 0.0
+      },
+      "speech_separation": {
+        "e1_speech_stem_si_sdr_db": 28.7,
+        "blind_matched_si_sdr_db": 14.84,
+        "blind_exact_k_si_sdr_db": 14.84,
+        "oracle_k_si_sdr_db": 14.84,
+        "blind_exact_k_spkid_pct": 88.0,
+        "n_exact_k_clips": 24,
+        "n_clean_e1_bypass": 23,
+        "n_total_speech_clips": 24
+      }
+    }
+  },
+  "paper_vs_sota_comparison": {
+    "org_mix_4_counting_exact_pct": {
+      "paper_baseline": 74.75,
+      "sanada_sota_blind": 96.97
+    },
+    "org_mix_9_counting_exact_pct": {
+      "paper_baseline": 36.46,
+      "sanada_sota_blind": 66.67
+    },
+    "org_mix_9_counting_mae": {
+      "paper_baseline": 0.8766,
+      "sanada_sota_blind": 0.4046
+    },
+    "fsd_32_tagging_macro_map": {
+      "paper_baseline": 0.6265,
+      "sanada_sota_blind": 0.9411
+    },
+    "fsd_32_env_sep_si_sdr_db": {
+      "paper_baseline_m2_m3": "5.05 / 0.73",
+      "sanada_sota_blind_m2_to_4": 4.77,
+      "per_m": {
+        "M2": 8.75,
+        "M3": 5.12,
+        "M4": 2.34
+      }
+    },
+    "high_density_k5_to_9_sep_db": {
+      "paper_baseline_k6_k9": "-3.40 / -8.57",
+      "sanada_sota_blind_hybrid_k5_to_9": -0.68
+    }
+  },
+  "exported_demo_bundles": [
+    "demo1_hybrid_speech_plus_env",
+    "demo2_dense_crowd_orpit",
+    "demo3_pure_3env_clapsep"
+  ]
+}

@@ -306,3 +306,43 @@ export const PATH_B_FALLBACK_BENCHMARKS = {
         }
     ]
 };
+
+export const SOTA_WAVE4_FALLBACK_BENCHMARKS = {
+    updated_at: "2026-11-25T09:44:08Z",
+    tier: "sota_wave4",
+    pure_speech_rejection: {
+        zero_false_env_tag_clips_pct: 98.99,
+        env_true_negative_acc_pct: 99.9,
+        human_speech_detection_pct: 100.0,
+        speech_detection_accuracy_pct: 100.0,
+        speech_false_positive_rate_pct: 1.01
+    },
+    counting: {
+        model: "Session A+ v3 (Melati-EAT + SSLAM + Subspace-Rank, Blind F v6)",
+        results: [
+            { domain: "Org-Mix-4 (Session A+ v3 Blind)", mae: 0.1141, rmse: 0.1729, exact_acc_pct: 96.97, relaxed_acc_pct: 100.0 },
+            { domain: "Org-Mix-9 (Session A+ v3 Blind)", mae: 0.4046, rmse: 0.5046, exact_acc_pct: 66.67, relaxed_acc_pct: 95.83 },
+            { domain: "FSD-Mix-32 (Path B Ref)", mae: 2.4385, rmse: 3.0842, exact_acc_pct: 11.11, relaxed_acc_pct: 40.0 }
+        ]
+    },
+    tagging: {
+        model: "Session B v4 (4-Arch EAT + SSLAM + CED + AST, Blind F v6)",
+        results: [
+            { domain: "FSD-32 Pure Env (Session B v4 Blind)", classes: "32 Classes", map_macro: 0.9411, f1_macro: 0.8341, roc_auc: 0.9850 },
+            { domain: "FSD-Mix-2 (Path B Ref)", classes: "32 Classes", map_macro: 1.0000, f1_macro: 1.0000, roc_auc: 1.0000 },
+            { domain: "FSD-Mix-Variable (Path B Ref)", classes: "32 Classes", map_macro: 0.8443, f1_macro: 0.7890, roc_auc: 0.8492 }
+        ]
+    },
+    separationSisdr: {
+        model: "MossFormer2 Specialists (C1/C2) + Recursive OR-PIT (D) + CLAPSep-LoRA (E2)",
+        results: [
+            { density_k: 2, domain: "Org-Mix (MossFormer2 C1 K=2)", si_sdr_db: 19.14, paper_baseline_db: 10.59, status: "Studio SOTA (+8.55 dB)" },
+            { density_k: 3, domain: "Org-Mix (MossFormer2 C1 K=3)", si_sdr_db: 12.12, paper_baseline_db: 5.08, status: "100% Spk-ID (+7.04 dB)" },
+            { density_k: 4, domain: "Org-Mix (MossFormer2 C2 K=4)", si_sdr_db: 6.50, paper_baseline_db: 4.24, status: "Pure K=4 Specialist" },
+            { density_k: 5, domain: "SAN9 (Recursive OR-PIT D)", si_sdr_db: 7.21, paper_baseline_db: 0.40, status: "Ceiling Broken (>0 dB)" },
+            { density_k: 6, domain: "SAN9 (Recursive OR-PIT D)", si_sdr_db: 3.61, paper_baseline_db: -3.40, status: "Ceiling Broken (+7.01 dB)" },
+            { density_k: 9, domain: "SAN9 (Recursive OR-PIT D)", si_sdr_db: -1.87, paper_baseline_db: -8.57, status: "O(K!) Eliminated (+6.70 dB)" }
+        ]
+    }
+};
+

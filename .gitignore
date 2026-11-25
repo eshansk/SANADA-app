@@ -1,3 +1,8 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
 # Confidential / Large Datasets
 SANADA/
 sanada/
@@ -10,6 +15,7 @@ Sample Dataset/
 *.wav
 *.mp3
 *.flac
+backend/static/stems/*.wav
 !backend/static/demos/*.wav
 !frontend/demos/*.wav
 
@@ -25,8 +31,15 @@ member4_separation_workspace/
 results/
 *.pt
 *.onnx
+*.pkl
+*.safetensors
+models/checkpoints/session_*/
+models/checkpoints/hf_cache/
+models/checkpoints/pretrained_cache/
+models/.hf_cache/
+.hf_cache/
 
-# Python / Bytecode
+# Python / Bytecode / Virtualenvs
 __pycache__/
 *.py[cod]
 *$py.class
@@ -40,6 +53,10 @@ Thumbs.db
 .antigravityignore
 Guidelines P V N Balarama Murthy/
 
+# Keep directory structure files
+!*.gitkeep
+!**/.gitkeep
+
 # Screenshot / Presentation raw media
 *.png
 *.jpeg
@@ -48,7 +65,3 @@ Guidelines P V N Balarama Murthy/
 # Scratch notes & prompt exports
 *gemini*
 *extracted_text*
-
-# Checkpoint Caches (Local foundation downloads)
-models/checkpoints/hf_cache/
-models/checkpoints/pretrained_cache/

@@ -2,26 +2,17 @@
  * frontend/js/services/api.js
  * ===========================
  * REST communication service for SANADA FastAPI backend.
- * Provides endpoints for health checks, pre-flight validation,
- * multi-task inference, dataset stats, and training tasks.
  */
 
 import { API_BASE } from '../config.js';
 
 export const API = {
-    /**
-     * Check backend system vitality, memory, and model status
-     */
     async getHealth() {
         const res = await fetch(`${API_BASE}/api/health`);
         if (!res.ok) throw new Error(`Health check failed: HTTP ${res.status}`);
         return await res.json();
     },
 
-    /**
-     * Pre-flight audio validation (POST /api/upload)
-     * Validates 16 kHz, single-channel monaural, 8.0s length
-     */
     async validateAudio(file) {
         const formData = new FormData();
         formData.append('file', file);
@@ -33,18 +24,15 @@ export const API = {
         return await res.json();
     },
 
-    /**
-     * Multi-task machine listening prediction (POST /api/predict)
-     * Executes Task 1 (Counting), Task 2 (Tagging), and Task 3 (Separation)
-     * Supports mode: 'auto' | 'sanada' | 'computer' | 'live_mic'
-     */
-    async predictAudio(file, task = 'all', mode = 'auto', all_4_stems = false, threshold = 0.5) {
+    async predictAudio(file, task = 'all', mode = 'auto', all_4_stems = false, threshold = null) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('task', task);
         formData.append('mode', mode);
         formData.append('all_4_stems', all_4_stems ? 'true' : 'false');
-        formData.append('threshold', (typeof threshold === 'number' ? threshold : 0.5).toString());
+        if (typeof threshold === 'number' && !Number.isNaN(threshold)) {
+            formData.append('threshold', threshold.toString());
+        }
         const res = await fetch(`${API_BASE}/api/predict`, {
             method: 'POST',
             body: formData
@@ -53,9 +41,6 @@ export const API = {
         return await res.json();
     },
 
-    /**
-     * Dedicated live microphone inference (POST /api/predict/live)
-     */
     async predictLiveAudio(file, all_4_stems = false) {
         const formData = new FormData();
         formData.append('file', file);
@@ -68,18 +53,12 @@ export const API = {
         return await res.json();
     },
 
-    /**
-     * System & Complexity Ceiling Telemetry (GET /api/stats)
-     */
     async getStats() {
         const res = await fetch(`${API_BASE}/api/stats`);
         if (!res.ok) throw new Error(`Failed to load analytics: HTTP ${res.status}`);
         return await res.json();
     },
 
-    /**
-     * Trigger asynchronous model training run (POST /api/train)
-     */
     async triggerTraining(config) {
         const res = await fetch(`${API_BASE}/api/train`, {
             method: 'POST',
@@ -90,18 +69,12 @@ export const API = {
         return await res.json();
     },
 
-    /**
-     * Poll status of training job (GET /api/train/{job_id})
-     */
     async pollTrainingJob(jobId) {
         const res = await fetch(`${API_BASE}/api/train/${jobId}`);
         if (!res.ok) throw new Error(`Job polling failed: HTTP ${res.status}`);
         return await res.json();
     },
 
-    /**
-     * Export and version model checkpoint (POST /api/save-model)
-     */
     async saveModel(task, versionTag, notes) {
         const res = await fetch(`${API_BASE}/api/save-model`, {
             method: 'POST',
@@ -116,9 +89,6 @@ export const API = {
         return await res.json();
     },
 
-    /**
-     * Formats relative stem or demo URL to absolute stream endpoint
-     */
     getStemUrl(relativeUrl) {
         if (!relativeUrl) return '';
         if (relativeUrl.startsWith('data:') || relativeUrl.startsWith('blob:') || relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) return relativeUrl;

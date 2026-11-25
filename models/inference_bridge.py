@@ -28,9 +28,11 @@ if BASE_DIR not in sys.path:
 
 from scripts.manifest_loader import FSD_32_CLASSES, ORG_4_SPEAKERS, ORG_9_SPEAKERS
 from scripts.download_checkpoints import ensure_checkpoint_cache, CHECKPOINT_DIR
+from models.device_utils import select_compute_device, clear_device_cache, get_device_telemetry
 from models.counting.predict import predict_source_count, load_counting_model
 from models.tagging.predict import predict_sound_tags, label_separated_stems
 from models.separation.predict import predict_separation_stems, load_separation_model
+from models.sota_pipeline import SANADASOTAPipeline
 from sanada_inference import (
     SANADAPipeline,
     condition_audio,
@@ -47,11 +49,7 @@ STATIC_STEMS_DIR = os.path.join(BASE_DIR, "backend", "static", "stems")
 class SANADAInferenceEngine:
     def __init__(self, device=None):
         if device is None:
-            dev_env = os.getenv("SANADA_DEVICE")
-            if dev_env:
-                self.device = torch.device(dev_env)
-            else:
-                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            self.device = select_compute_device()
         else:
             self.device = torch.device(device)
 
@@ -68,18 +66,36 @@ class SANADAInferenceEngine:
         ).to(self.device)
         self.amp_to_db = torchaudio.transforms.AmplitudeToDB(stype="power", top_db=80.0).to(self.device)
 
-        # Initialize Production SANADAPipeline
+        # Initialize Primary SOTA Wave 1-3 Pipeline
+        self.sota_pipeline = None
         try:
-            self.pipeline = SANADAPipeline(
+            self.sota_pipeline = SANADASOTAPipeline(
                 checkpoint_dir=os.path.join(BASE_DIR, "models", "checkpoints"),
                 device=self.device
             )
+            if not self.sota_pipeline.is_ready():
+                print("SOTA Pipeline checkpoints incomplete; will use Path B fallback.")
+                self.sota_pipeline = None
+            else:
+                print("SANADA SOTA Wave 1-3 Pipeline initialized as primary tier.")
         except Exception as e:
-            print(f"Warning: SANADAPipeline initialization notice: {e}")
-            self.pipeline = None
+            print(f"Notice initializing SOTA Pipeline: {e}")
+            self.sota_pipeline = None
 
-        # Only load legacy fallback models if pipeline failed to initialize (saves RAM)
-        if self.pipeline is None:
+        # Initialize Production SANADAPipeline (Fallback tier - only if SOTA is not ready)
+        self.pipeline = None
+        if self.sota_pipeline is None:
+            try:
+                self.pipeline = SANADAPipeline(
+                    checkpoint_dir=os.path.join(BASE_DIR, "models", "checkpoints"),
+                    device=self.device
+                )
+            except Exception as e:
+                print(f"Warning: SANADAPipeline initialization notice: {e}")
+                self.pipeline = None
+
+        # Only load legacy fallback models if neither SOTA nor SANADAPipeline is active
+        if self.sota_pipeline is None and self.pipeline is None:
             try:
                 self.counting_model = load_counting_model(device=str(self.device))
             except Exception:
@@ -93,10 +109,14 @@ class SANADAInferenceEngine:
             self.counting_model = None
             self.separation_model = None
 
-        print(f"SANADA Inference Engine initialized on device: {self.device} (Pipeline active: {self.pipeline is not None})")
+        print(f"SANADA Inference Engine initialized on device: {self.device} (SOTA active: {self.sota_pipeline is not None}, Fallback pipeline active: {self.pipeline is not None})")
 
     def preprocess_audio(self, waveform_data, sample_rate=TARGET_SR, mode="auto"):
         """Converts raw audio array/bytes into standardized [1, 128000] tensor."""
+        if self.sota_pipeline is not None:
+            _, tensor = self.sota_pipeline.standardize_audio(waveform_data, orig_sr=sample_rate, mode=mode)
+            return tensor
+
         if self.pipeline is not None:
             _, tensor = self.pipeline.standardize_audio(waveform_data, sample_rate=sample_rate, mode=mode)
             return tensor
@@ -113,6 +133,23 @@ class SANADAInferenceEngine:
 
     def predict_counting(self, waveform_tensor, filename="", mode="auto"):
         """Task 1: Source Counting Regressor."""
+        if self.sota_pipeline is not None and self.sota_pipeline.is_ready():
+            raw_t = waveform_tensor if isinstance(waveform_tensor, torch.Tensor) else self.preprocess_audio(waveform_tensor, mode=mode)
+            speech_stem, env_stem = self.sota_pipeline.separate_speech_vs_env(raw_t)
+            res = self.sota_pipeline.predict_source_count(raw_t, speech_stem, env_stem=env_stem, filename=filename)
+            return {
+                "estimated_k": res["estimated_k"],
+                "predicted_k": res["predicted_k"],
+                "raw_continuous_prediction": res["raw_continuous_prediction"],
+                "raw_k": res["raw_k"],
+                "calibrated_k": res["calibrated_k"],
+                "confidence": res["confidence"],
+                "silent": res["silent"],
+                "complexity_ceiling_exceeded": res["complexity_ceiling_exceeded"],
+                "model": res.get("model", "SANADA-SOTA-SessionAplus"),
+                "tier": "sota_wave3"
+            }
+
         # Invoke Production SANADAPipeline
         if self.pipeline is not None:
             wav_np = waveform_tensor.squeeze().cpu().numpy()
@@ -150,11 +187,37 @@ class SANADAInferenceEngine:
             "model": "Conformer-Regressor-MSE"
         }
 
-    def predict_tagging(self, waveform_tensor, taxonomy="auto", k_from_member2=None, threshold=0.5, filename="", mode="auto"):
-        """Task 2: Conformer + ASL for Environmental Acoustic Tagging (Fix 2)."""
+    def predict_tagging(self, waveform_tensor, taxonomy="auto", k_from_member2=None, threshold=None, filename="", mode="auto"):
+        """Task 2: Environmental Acoustic Tagging (preserves 32 calibrated per-class thresholds when threshold is None)."""
+        if self.sota_pipeline is not None and self.sota_pipeline.is_ready():
+            raw_t = waveform_tensor if isinstance(waveform_tensor, torch.Tensor) else self.preprocess_audio(waveform_tensor, mode=mode)
+            _, env_stem = self.sota_pipeline.separate_speech_vs_env(raw_t)
+            is_k0 = (k_from_member2 == 0)
+            res = self.sota_pipeline.predict_env_tagging(
+                raw_t if is_k0 else env_stem,
+                threshold_override=threshold,
+                is_clean_k0=is_k0,
+            )
+            return {
+                "environmental_events": {
+                    "active_events": res["active_events"],
+                    "top_k_events": res["top_5_events"],
+                    "class_probabilities": res["class_probabilities"]
+                },
+                "active_classes": res["active_classes"],
+                "detected_tags": res["active_classes"],
+                "class_probabilities": res["class_probabilities"],
+                "num_detected": res.get("num_detected", len(res.get("active_classes", []))),
+                "top_5_events": res["top_5_events"],
+                "threshold_applied": res.get("threshold_applied", threshold),
+                "taxonomy": "FSD-50K-32-Classes",
+                "k_guided": k_from_member2,
+                "model": "SANADA-SOTA-SessionB-v4"
+            }
+        eff_thr = 0.5 if threshold is None else threshold
         if self.pipeline is not None:
             wav_np = waveform_tensor.squeeze().cpu().numpy()
-            res = self.pipeline.predict_tagging(wav_np, waveform_tensor, mode=mode, tag_threshold=threshold)
+            res = self.pipeline.predict_tagging(wav_np, waveform_tensor, mode=mode, tag_threshold=eff_thr)
             return {
                 "environmental_events": res["environmental_events"],
                 "active_classes": res["active_classes"],
@@ -162,7 +225,7 @@ class SANADAInferenceEngine:
                 "class_probabilities": res["class_probabilities"],
                 "num_detected": res["num_detected"],
                 "top_5_events": res.get("top_5_events", []),
-                "threshold_applied": res.get("threshold_applied", threshold),
+                "threshold_applied": res.get("threshold_applied", eff_thr),
                 "taxonomy": res.get("taxonomy", "FSD-50K-32-Classes"),
                 "k_guided": k_from_member2,
                 "model": "Conformer-Classifier-ASL"
@@ -171,7 +234,7 @@ class SANADAInferenceEngine:
         # Legacy fallback
         res = predict_sound_tags(
             waveform_tensor,
-            threshold=threshold,
+            threshold=eff_thr,
             k_from_member2=k_from_member2,
             taxonomy=taxonomy,
             filename_hint=filename,
@@ -183,16 +246,25 @@ class SANADAInferenceEngine:
             "class_probabilities": res["class_probabilities"],
             "num_detected": res["num_detected"],
             "top_5_events": [],
-            "threshold_applied": res.get("threshold_applied", threshold),
+            "threshold_applied": res.get("threshold_applied", eff_thr),
             "taxonomy": res.get("taxonomy", taxonomy),
             "k_guided": res["k_guided"],
             "model": "Conformer-Classifier-ASL"
         }
 
     def predict_separation(self, waveform_tensor, estimated_k=2, filename="", all_4_stems=False):
-        """Task 3: Conv-TasNet Source Separation with SI-SDR Scale Restoration (Fix 3)."""
-        k = max(1, min(int(estimated_k), 4))
+        """Task 3: Source Separation with unclamped K=1..9 support."""
+        k = max(0, min(int(estimated_k), 9))
         session_id = uuid.uuid4().hex[:8]
+
+        if self.sota_pipeline is not None and self.sota_pipeline.is_ready():
+            return self.sota_pipeline.predict_separation(
+                speech_stem=waveform_tensor,
+                predicted_k=k,
+                output_dir=STATIC_STEMS_DIR,
+                file_prefix=f"session_{session_id}",
+                all_4_stems=all_4_stems
+            )
 
         if self.pipeline is not None:
             wav_np = waveform_tensor.squeeze().cpu().numpy()
@@ -294,22 +366,40 @@ class SANADAInferenceEngine:
         waveform_data,
         sample_rate=TARGET_SR,
         task="all",
-        threshold=0.5,
+        threshold=None,
         filename="",
         mode="auto",
         all_4_stems=False
     ):
         """Orchestrates multi-task inference pipeline across 3 audio conditioning modes."""
-        if self.pipeline is not None:
-            # Run production SANADAPipeline directly
-            res = self.pipeline.analyze_and_separate(
+        # Primary tier: SOTA Wave 1-3 Pipeline
+        if self.sota_pipeline is not None and self.sota_pipeline.is_ready():
+            return self.sota_pipeline.analyze_and_separate(
                 audio_input=waveform_data,
                 orig_sr=sample_rate,
                 mode=mode,
                 output_dir=STATIC_STEMS_DIR,
                 tag_threshold=threshold,
                 file_prefix=filename,
-                all_4_stems=all_4_stems
+                all_4_stems=all_4_stems,
+                task=task
+            )
+
+        if self.pipeline is not None:
+            # Fallback tier: Path B Foundation SANADAPipeline
+            extra_fb_kwargs = {}
+            import inspect
+            if "task" in inspect.signature(self.pipeline.analyze_and_separate).parameters:
+                extra_fb_kwargs["task"] = task
+            res = self.pipeline.analyze_and_separate(
+                audio_input=waveform_data,
+                orig_sr=sample_rate,
+                mode=mode,
+                output_dir=STATIC_STEMS_DIR,
+                tag_threshold=(0.5 if threshold is None else threshold),
+                file_prefix=filename,
+                all_4_stems=all_4_stems,
+                **extra_fb_kwargs
             )
 
             human_speech_detected = res.get("human_speech_detected", False)

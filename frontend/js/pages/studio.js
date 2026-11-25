@@ -736,7 +736,7 @@ export function initStudioPage() {
             const task = DOM.taskSelect ? DOM.taskSelect.value : 'all';
             const mode = 'auto';
             const all4Stems = false;
-            const threshold = 0.5;
+            const threshold = null;
             DOM.runInferenceBtn.disabled = true;
             if (DOM.runInferenceMobileBtn) DOM.runInferenceMobileBtn.disabled = true;
             if (DOM.inferenceBtnIcon) DOM.inferenceBtnIcon.innerHTML = '<div class="spinner"></div>';
@@ -757,7 +757,7 @@ export function initStudioPage() {
                     await saveRun(
                         activeFile.name,
                         data.mode_used || mode,
-                        threshold,
+                        threshold ?? 0.5,
                         task,
                         all4Stems,
                         data,
@@ -837,7 +837,12 @@ export function initStudioPage() {
         const humanSpeechDetected = Boolean(results.human_speech_detected || results.results?.human_speech_detected);
         const humanSpeechProb = results.human_speech_prob || results.results?.human_speech_prob || 0.0;
         const activeSeparator = results.active_separator || results.results?.active_separator || (
-            dispK === 2 ? 'SepFormer-Libri2Mix' : (dispK === 3 ? 'SepFormer-Libri3Mix' : 'SepFormer-4Spk')
+            dispK === 0 ? 'SANADA-SOTA-SessionE1-Environmental'
+            : dispK === 1 ? 'SANADA-SOTA-SessionE1-Speech'
+            : dispK === 2 ? 'SANADA-SOTA-MossFormer2-2Spk'
+            : dispK === 3 ? 'SANADA-SOTA-MossFormer2-3Spk'
+            : dispK === 4 ? 'SANADA-SOTA-MossFormer2-4Spk'
+            : `SANADA-SOTA-MossFormer2-ORPIT-${dispK}Spk`
         );
 
         // Task 1: Source Counting
@@ -850,7 +855,7 @@ export function initStudioPage() {
             }
             if (DOM.kModelBadge) {
                 const modeTag = results.mode_used ? ` [${results.mode_used.toUpperCase()}]` : '';
-                DOM.kModelBadge.textContent = `${count.model || 'WavLM-Base+'}${modeTag}`;
+                DOM.kModelBadge.textContent = `${count.model || 'SANADA-SOTA-SessionAplus'}${modeTag}`;
             }
             if (DOM.kContinuousVal) {
                 if (count.calibrated_k !== undefined) {
@@ -867,12 +872,12 @@ export function initStudioPage() {
         if (DOM.probBarsContainer) {
             const taggingBadge = document.getElementById('taggingModelBadge') || document.querySelector('#studioTaggingCard .card-header .badge');
             if (taggingBadge) {
-                taggingBadge.textContent = results.label_tagging?.model || 'MIT AST (33-Class)';
+                taggingBadge.textContent = results.label_tagging?.model || 'SANADA-SOTA-SessionB-v4 (32-Class)';
             }
 
             const tagging = results.label_tagging || results.environmental_events || {};
             const rawActiveClasses = tagging.active_classes || tagging.active_events || results.active_events || [];
-            const activeClasses = rawActiveClasses.map(c => typeof c === 'string' ? c : (c.event || c.class || String(c)));
+            const activeClasses = rawActiveClasses.map(c => typeof c === 'string' ? c : (c.label || c.event || c.class || String(c)));
             const isCorroborated = (results.source_counting && results.source_counting.corroborated_by_tagging) || false;
 
             // Collect only confirmed active/detected tags
@@ -950,10 +955,18 @@ export function initStudioPage() {
             separationBadge.textContent = activeSeparator;
         }
 
-        const rawStems = results.source_separation?.stems || results.speech_separation?.stems || results.separated_stems || [];
+        const speechStems = results.source_separation?.stems || results.speech_separation?.stems || results.separated_stems || [];
+        const envStemsRaw = results.env_separation?.env_stems || results.env_stems || [];
+        const seenFiles = new Set(speechStems.map(s => s.filename));
+        const extraEnvStems = (dispK > 0 && results.env_separation?.e2_active)
+            ? envStemsRaw.filter(s => s.filename && !seenFiles.has(s.filename))
+            : [];
+        const rawStems = [...speechStems, ...extraEnvStems];
         if (rawStems.length > 0 && stemMatrix) {
-            const resolvedStems = rawStems.map(s => ({
+            const resolvedStems = rawStems.map((s, idx) => ({
                 ...s,
+                channel: idx + 1,
+                rank: idx + 1,
                 url: API.getStemUrl(s.audio_data_url || s.url || s.filename)
             }));
             stemMatrix.render(resolvedStems, activeBuffer, API_BASE);

@@ -1,0 +1,9 @@
+{
+  "appId": "com.ngit.sanada",
+  "appName": "SANADA Audio AI",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

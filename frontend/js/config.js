@@ -2,10 +2,11 @@
  * frontend/js/config.js
  * =====================
  * Global runtime configuration and audio processing constraints.
- * Centralizes API endpoint discovery and DSP parameters.
+ * Supports same-origin Web/Nginx hosting and Capacitor Android APK native bridging.
  */
 
 export const PRODUCTION_API_URL = '';
+export const MOBILE_FALLBACK_API_URL = 'https://sanada-api.azurewebsites.net';
 
 function resolveApiBase() {
     let base = '';
@@ -20,6 +21,14 @@ function resolveApiBase() {
         } catch (e) {
             // Ignore localStorage security/sandbox errors
         }
+    }
+    const isNativeMobile = typeof window !== 'undefined' && (
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'file:' ||
+        Boolean(window.Capacitor?.isNativePlatform?.())
+    );
+    if (!base && isNativeMobile) {
+        base = window.SANADA_MOBILE_API_URL || MOBILE_FALLBACK_API_URL;
     }
     if (!base) {
         base = PRODUCTION_API_URL;
