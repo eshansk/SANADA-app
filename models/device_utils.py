@@ -11,6 +11,7 @@ import os
 import gc
 import logging
 from typing import Optional, Dict, Any, Union
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import torch
 
 logger = logging.getLogger("SANADA-DeviceUtils")

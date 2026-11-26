@@ -19,6 +19,7 @@ Multi-Tier Endpoint Mapping:
 """
 
 import os
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import sys
 import io
 import time

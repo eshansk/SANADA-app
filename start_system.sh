@@ -115,6 +115,7 @@ else
 
     export SANADA_DEPLOY_MODE="local"
     export HF_HOME="$BASE_DIR/models/checkpoints/hf_cache"
+    export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
 
     exec python3 -m uvicorn backend.app:app --host 0.0.0.0 --port "$APP_PORT"
 fi
