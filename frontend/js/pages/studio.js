@@ -17,6 +17,7 @@ import { showToast } from '../ui/toast.js';
 import {
     getInferencePreferences,
     saveRun,
+    loadRunAudioFromCache,
     openLoadHistoryModal,
     closeLoadHistoryModal
 } from '../services/runHistory.js';
@@ -476,7 +477,7 @@ export function initStudioPage() {
                         DOM.recordToggleBtn.classList.remove('recording');
                         if (DOM.recHint) DOM.recHint.textContent = 'Standardized to 8.0s (128,000 samples). Ready!';
                         activeBuffer = buffer;
-                        const blob = audioEngine.bufferToWavBlob(buffer);
+                        const blob = audioEngine.bufferToWavBlob(buffer, TARGET_SR, EXPECTED_FRAMES);
                         activeFile = new File([blob], `mic_capture_${Date.now().toString().slice(-4)}.wav`, { type: 'audio/wav' });
                         if (DOM.modeSelect) DOM.modeSelect.value = 'live_mic';
                         displayDecodedBuffer(activeFile.name, buffer);
@@ -771,8 +772,14 @@ export function initStudioPage() {
                     console.warn('[Studio] Failed to save run history:', histErr);
                 }
             } catch (err) {
-                showToast('Backend offline; activating high-fidelity simulation.', 'warning');
-                renderMockResults();
+                console.error('[Studio] Inference request failed:', err);
+                const msg = err?.message || 'Backend inference error. Check server terminal logs.';
+                showToast(msg, 'error');
+                if (DOM.kHeroNumber) DOM.kHeroNumber.textContent = 'ERR';
+                if (DOM.kHeroSub) DOM.kHeroSub.textContent = 'Inference failed — check backend logs';
+                if (DOM.probBarsContainer) {
+                    DOM.probBarsContainer.innerHTML = `<div class="ghost-sub" style="padding:12px;">${escapeHtml(msg)}</div>`;
+                }
             } finally {
                 DOM.runInferenceBtn.disabled = false;
                 if (DOM.runInferenceMobileBtn) DOM.runInferenceMobileBtn.disabled = false;
@@ -848,13 +855,22 @@ export function initStudioPage() {
             : `SANADA-SOTA-MossFormer2-ORPIT-${dispK}Spk`
         );
 
+        const tagging = results.label_tagging || results.environmental_events || {};
+        const rawActiveClasses = tagging.active_classes || tagging.active_events || results.active_events || [];
+        const activeClasses = rawActiveClasses.map(c => typeof c === 'string' ? c : (c.label || c.event || c.class || String(c)));
+
         // Task 1: Source Counting
         if (DOM.kHeroNumber) {
             animateCountUp(DOM.kHeroNumber, dispK, 400, dominantCrowdMode);
             updateSegmentedMeter(dispK, dominantCrowdMode, true);
             if (DOM.kHeroSub) {
                 const confVal = count.confidence !== undefined ? (count.confidence * 100).toFixed(1) : '94.5';
-                DOM.kHeroSub.textContent = `Confidence: ${confVal}%`;
+                const envCnt = activeClasses.length;
+                if (dispK === 0 && envCnt > 0) {
+                    DOM.kHeroSub.textContent = `0 Speech • ${envCnt} Environmental Sound${envCnt === 1 ? '' : 's'} (${confVal}%)`;
+                } else {
+                    DOM.kHeroSub.textContent = `Confidence: ${confVal}%`;
+                }
             }
             if (DOM.kModelBadge) {
                 const modeTag = results.mode_used ? ` [${results.mode_used.toUpperCase()}]` : '';
@@ -878,9 +894,6 @@ export function initStudioPage() {
                 taggingBadge.textContent = results.label_tagging?.model || 'SANADA-SOTA-SessionB-v4 (32-Class)';
             }
 
-            const tagging = results.label_tagging || results.environmental_events || {};
-            const rawActiveClasses = tagging.active_classes || tagging.active_events || results.active_events || [];
-            const activeClasses = rawActiveClasses.map(c => typeof c === 'string' ? c : (c.label || c.event || c.class || String(c)));
             const isCorroborated = (results.source_counting && results.source_counting.corroborated_by_tagging) || false;
 
             // Collect only confirmed active/detected tags
@@ -971,7 +984,7 @@ export function initStudioPage() {
                 ...s,
                 channel: idx + 1,
                 rank: idx + 1,
-                url: API.getStemUrl(s.audio_data_url || s.url || s.filename)
+                url: API.getStemUrl(s.url || (s.filename ? `/static/stems/${s.filename}` : '') || s.audio_data_url)
             }));
             stemMatrix.render(resolvedStems, activeBuffer, API_BASE);
         }
@@ -1211,15 +1224,18 @@ export function initStudioPage() {
         // 1. Restore task setting
         if (DOM.taskSelect && run.task) DOM.taskSelect.value = run.task;
 
-        // 2. Setup activeFile mock and safely parse resultJson
+        // 2. Load persistent audio blobs from IndexedDB & safely parse resultJson
+        const cachedAudio = await loadRunAudioFromCache(run.id);
         let rj = run.resultJson || {};
         if (typeof rj === 'string') {
-            try { rj = JSON.parse(rj); } catch(e) { rj = {}; }
+            try { rj = JSON.parse(rj); } catch (e) { rj = {}; }
         }
         const res = Object.assign({}, rj, rj.results || {});
 
-        // Build activeFile representation
-        activeFile = new File([], run.filename || 'history_recording.wav', { type: 'audio/wav' });
+        // Restore activeFile (preferring full cached inputBlob so audio/re-runs work seamlessly)
+        activeFile = (cachedAudio?.inputBlob && cachedAudio.inputBlob.size > 0)
+            ? new File([cachedAudio.inputBlob], run.filename || 'history_recording.wav', { type: cachedAudio.inputBlob.type || 'audio/wav' })
+            : new File([], run.filename || 'history_recording.wav', { type: 'audio/wav' });
 
         // Update preflight & ingest badges
         if (DOM.metaFilename) DOM.metaFilename.textContent = `[History] ${run.filename}`;
@@ -1233,67 +1249,122 @@ export function initStudioPage() {
         if (DOM.runInferenceBtn) DOM.runInferenceBtn.disabled = false;
         if (DOM.runHint) DOM.runHint.textContent = `Viewing historic run "${run.name}" (${run.filename})`;
 
-        // 3. Audio decoding for visualizer & transport (if embedded input audio or stem audio exists)
-        let stems = res.source_separation?.stems 
-                 || res.speech_separation?.stems 
-                 || res.separated_stems 
-                 || rj.separated_stems 
-                 || rj.results?.source_separation?.stems 
-                 || [];
-
-        stems = stems.map((s, idx) => {
+        // 3. Normalize speech & environmental stems and decode preview buffer
+        const normalizeHistoryStem = (s, idx) => {
             const ch = s.channel || (idx + 1);
-            const audioSrc = s.audio_data_url || s.url || s.stem_url || s.filename;
-            const resolvedUrl = API.getStemUrl(audioSrc);
+            const blob = (s.filename && cachedAudio?.stemBlobs?.[s.filename]) ? cachedAudio.stemBlobs[s.filename] : null;
+            if (blob) {
+                const objUrl = URL.createObjectURL(blob);
+                return {
+                    ...s,
+                    channel: ch,
+                    url: objUrl,
+                    audio_data_url: objUrl
+                };
+            }
+            const staticFallback = s.filename ? `${API_BASE}/static/stems/${s.filename}` : '';
+            if (s.audio_data_url && s.audio_data_url.startsWith('data:')) {
+                return {
+                    ...s,
+                    channel: ch,
+                    url: staticFallback || API.getStemUrl(s.url || s.stem_url || s.filename),
+                    audio_data_url: s.audio_data_url
+                };
+            }
+            const rawSrc = s.url || s.stem_url || s.audio_data_url || s.filename || '';
+            const staticMatch = typeof rawSrc === 'string' ? rawSrc.match(/\/static\/stems\/([^/?#]+)/) : null;
+            const resolvedUrl = (staticFallback && (staticMatch || !rawSrc.includes('/')))
+                ? staticFallback
+                : API.getStemUrl(rawSrc);
             return {
                 ...s,
                 channel: ch,
                 url: resolvedUrl,
-                audio_data_url: s.audio_data_url || resolvedUrl
+                audio_data_url: resolvedUrl
             };
-        });
+        };
+
+        const rawSpeechStems = res.source_separation?.stems
+                            || res.speech_separation?.stems
+                            || res.separated_stems
+                            || rj.separated_stems
+                            || rj.results?.source_separation?.stems
+                            || [];
+        const rawEnvStems = res.env_separation?.env_stems
+                         || res.env_stems
+                         || rj.env_stems
+                         || rj.results?.env_separation?.env_stems
+                         || [];
+
+        const stems = rawSpeechStems.map(normalizeHistoryStem);
+        const envStems = rawEnvStems.map(normalizeHistoryStem);
 
         if (!res.source_separation) res.source_separation = {};
         res.source_separation.stems = stems;
         res.separated_stems = stems;
-
-        let audioToDecode = rj.input_audio_data_url || rj.results?.input_audio_data_url;
-        if (!audioToDecode && stems.length > 0) {
-            audioToDecode = stems[0].audio_data_url || stems[0].url;
-        }
-        if (!audioToDecode && run.filename) {
-            audioToDecode = API.getStemUrl(run.filename);
+        if (envStems.length > 0 || res.env_separation || res.env_stems) {
+            if (!res.env_separation) res.env_separation = {};
+            res.env_separation.env_stems = envStems;
+            res.env_stems = envStems;
         }
 
         let decodedMixBuffer = null;
-        if (audioToDecode) {
+        if (cachedAudio?.inputBlob && cachedAudio.inputBlob.size > 0) {
             try {
-                const targetUrl = API.getStemUrl(audioToDecode);
-                const resp = await fetch(targetUrl);
-                if (resp.ok) {
-                    const arrayBuf = await resp.arrayBuffer();
-                    decodedMixBuffer = await audioEngine.decodeAudio(arrayBuf);
-                    activeBuffer = decodedMixBuffer;
-                    displayDecodedBuffer(`[History] ${run.filename}`, decodedMixBuffer);
-                }
+                const arrayBuf = await cachedAudio.inputBlob.arrayBuffer();
+                decodedMixBuffer = await audioEngine.decodeAudio(arrayBuf);
             } catch (err) {
-                console.warn('[Studio] Could not decode preview audio buffer from history:', err);
+                console.warn('[Studio] Could not decode cached inputBlob from IndexedDB:', err);
             }
+        }
+        if (!decodedMixBuffer) {
+            const firstStem = stems[0] || envStems[0] || null;
+            const audioCandidates = [
+                rj.input_audio_data_url || rj.results?.input_audio_data_url,
+                firstStem ? (firstStem.audio_data_url || firstStem.url) : null,
+                run.filename ? `${API_BASE}/static/demos/${run.filename}` : null
+            ].filter(Boolean);
+
+            for (const cand of audioCandidates) {
+                try {
+                    const targetUrl = API.getStemUrl(cand);
+                    const resp = await fetch(targetUrl);
+                    if (resp.ok) {
+                        const arrayBuf = await resp.arrayBuffer();
+                        decodedMixBuffer = await audioEngine.decodeAudio(arrayBuf);
+                        break;
+                    }
+                } catch (err) {
+                    console.warn('[Studio] Could not decode preview audio buffer from history:', err);
+                }
+            }
+        }
+        if (decodedMixBuffer) {
+            activeBuffer = decodedMixBuffer;
+            displayDecodedBuffer(`[History] ${run.filename}`, decodedMixBuffer);
         }
 
         // 4. Update audio metadata stats
         const sampleRate = (decodedMixBuffer?.sampleRate) ? (decodedMixBuffer.sampleRate / 1000).toFixed(1) : '16.0';
         const channels = (decodedMixBuffer?.numberOfChannels === 2) ? '2 (Stereo)' : '1 (Mono)';
-        const duration = (decodedMixBuffer?.duration) 
-            ? decodedMixBuffer.duration.toFixed(2) 
+        const duration = (decodedMixBuffer?.duration)
+            ? decodedMixBuffer.duration.toFixed(2)
             : Number(res.duration_sec || res.duration_s || 8.0).toFixed(2);
 
-        if (DOM.metaSr) DOM.metaSr.textContent = `${sampleRate} kHz`;
-        if (DOM.metaCh) DOM.metaCh.textContent = channels;
-        if (DOM.metaDur) DOM.metaDur.textContent = `${duration} s`;
+        if (DOM.metaSampleRate) DOM.metaSampleRate.textContent = `${sampleRate} kHz`;
+        if (DOM.metaChannels) DOM.metaChannels.textContent = channels;
+        if (DOM.metaDuration) DOM.metaDuration.textContent = `${duration} s`;
 
-        // 5. Render the complete prediction results into Studio
+        // 5. Render the complete prediction results into Studio & force deferred canvas redraw
         renderPredictionResults(res);
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (visualizer && activeBuffer) {
+                    visualizer.resize();
+                    visualizer.render(activeBuffer);
+                }
+            }, 120);
+        });
 
         // 6. Toast notice
         showToast(`Loaded run "${run.name}" from history with all stems!`, 'success');
@@ -1330,6 +1401,16 @@ export function initStudioPage() {
 
     window.addEventListener('sanada:prefsChanged', applyStudioPreferences);
     window.addEventListener('sanada:roleChanged', applyStudioPreferences);
+    window.addEventListener('sanada:routeChanged', (e) => {
+        if (e.detail?.route === 'predict' && visualizer && activeBuffer) {
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    visualizer.resize();
+                    visualizer.render(activeBuffer);
+                }, 80);
+            });
+        }
+    });
 
     applyStudioPreferences();
 

@@ -33,11 +33,7 @@ export class AudioEngine {
 
     initContext() {
         if (!this.ctx) {
-            try {
-                this.ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: TARGET_SR });
-            } catch (e) {
-                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume().catch(() => {});
@@ -157,12 +153,76 @@ export class AudioEngine {
         return buffer;
     }
 
+    _extractMonoResampledFloat32(buffer, targetSr = TARGET_SR, targetFrames = null) {
+        const numCh = buffer.numberOfChannels || 1;
+        const inLen = buffer.length;
+        const mono = new Float32Array(inLen);
+        for (let ch = 0; ch < numCh; ch++) {
+            const data = buffer.getChannelData(ch);
+            for (let i = 0; i < inLen; i++) mono[i] += data[i] / numCh;
+        }
+        const srcSr = buffer.sampleRate || targetSr;
+        let resampled;
+        if (srcSr === targetSr) {
+            resampled = mono;
+        } else {
+            const ratio = srcSr / targetSr;
+            const outLen = Math.max(1, Math.round(inLen / ratio));
+            resampled = new Float32Array(outLen);
+            if (ratio > 1.0) {
+                // Box-filter anti-aliased decimation + linear interpolation for clean downsampling (e.g. 48k -> 16k)
+                for (let i = 0; i < outLen; i++) {
+                    const start = Math.floor(i * ratio);
+                    const end = Math.min(inLen, Math.max(start + 1, Math.floor((i + 1) * ratio)));
+                    let acc = 0;
+                    for (let j = start; j < end; j++) acc += mono[j];
+                    resampled[i] = acc / (end - start);
+                }
+            } else {
+                for (let i = 0; i < outLen; i++) {
+                    const pos = i * ratio;
+                    const i0 = Math.floor(pos);
+                    const i1 = Math.min(i0 + 1, inLen - 1);
+                    const frac = pos - i0;
+                    resampled[i] = mono[i0] * (1 - frac) + mono[i1] * frac;
+                }
+            }
+        }
+        if (targetFrames && targetFrames > 0) {
+            const fixed = new Float32Array(targetFrames);
+            fixed.set(resampled.subarray(0, Math.min(resampled.length, targetFrames)));
+            return fixed;
+        }
+        return resampled;
+    }
+
+    _padOrTrimNativeMonoBuffer(decoded, durationSec = EXPECTED_DURATION) {
+        const ctx = this.initContext();
+        const sr = decoded.sampleRate || ctx.sampleRate || 48000;
+        const targetLen = Math.max(1, Math.round(sr * durationSec));
+        const outBuf = ctx.createBuffer(1, targetLen, sr);
+        const out = outBuf.getChannelData(0);
+        const numCh = decoded.numberOfChannels || 1;
+        const copyLen = Math.min(decoded.length, targetLen);
+        for (let ch = 0; ch < numCh; ch++) {
+            const src = decoded.getChannelData(ch);
+            for (let i = 0; i < copyLen; i++) out[i] += src[i] / numCh;
+        }
+        return outBuf;
+    }
+
     /**
      * Converts an AudioBuffer to a downloadable linear 16-bit PCM WAV Blob
      */
-    bufferToWavBlob(buffer) {
-        const numChan = buffer.numberOfChannels;
-        const length = buffer.length * numChan * 2 + 44;
+    bufferToWavBlob(buffer, targetSr = null, targetFrames = null) {
+        const useResampledMono = Boolean(targetSr);
+        const sampleRate = useResampledMono ? targetSr : buffer.sampleRate;
+        const channels = useResampledMono
+            ? [this._extractMonoResampledFloat32(buffer, targetSr, targetFrames)]
+            : Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+        const numChan = channels.length;
+        const numFrames = channels[0] ? channels[0].length : 0;
+        const length = numFrames * numChan * 2 + 44;
         const out = new DataView(new ArrayBuffer(length));
         let offset = 0;
         let pos = 0;
@@ -177,20 +237,18 @@ export class AudioEngine {
         setUint32(16);
         setUint16(1); // PCM
         setUint16(numChan);
-        setUint32(buffer.sampleRate);
-        setUint32(buffer.sampleRate * 2 * numChan);
+        setUint32(sampleRate);
+        setUint32(sampleRate * 2 * numChan);
         setUint16(numChan * 2);
         setUint16(16);
         setUint32(0x61746164); // "data"
         setUint32(length - pos - 4);
 
-        const channels = [];
-        for (let i = 0; i < numChan; i++) channels.push(buffer.getChannelData(i));
         while (pos < length) {
             for (let i = 0; i < numChan; i++) {
-                let sample = Math.max(-1, Math.min(1, channels[i][offset]));
-                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
-                out.setInt16(pos, sample, true);
+                const raw = Math.max(-1, Math.min(1, channels[i][offset] || 0));
+                const int16 = (raw < 0 ? raw * 32768 : raw * 32767) | 0;
+                out.setInt16(pos, int16, true);
                 pos += 2;
             }
             offset++;
@@ -209,25 +267,29 @@ export class AudioEngine {
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream);
+            const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+            const chosenType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported)
+                ? (preferredTypes.find(t => MediaRecorder.isTypeSupported(t)) || '')
+                : '';
+            this.mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
             this.mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) this.recordedChunks.push(e.data);
             };
 
             this.mediaRecorder.onstop = async () => {
-                const blob = new Blob(this.recordedChunks, { type: 'audio/webm' });
-                const arrayBuffer = await blob.arrayBuffer();
-                this.ctx.decodeAudioData(arrayBuffer, (decoded) => {
-                    // Standardize into exactly 8.0s 16 kHz Mono buffer
-                    const standardBuffer = this.ctx.createBuffer(1, EXPECTED_FRAMES, TARGET_SR);
-                    const out = standardBuffer.getChannelData(0);
-                    const inData = decoded.getChannelData(0);
-                    const len = Math.min(inData.length, EXPECTED_FRAMES);
-                    for (let i = 0; i < len; i++) out[i] = inData[i];
-
-                    this.currentBuffer = standardBuffer;
-                    if (onComplete) onComplete(standardBuffer);
-                }, onError);
+                try {
+                    const mimeType = this.mediaRecorder.mimeType || chosenType || 'audio/webm';
+                    const blob = new Blob(this.recordedChunks, { type: mimeType });
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const decoded = await this.decodeAudio(arrayBuffer);
+                    const playbackBuffer = this._padOrTrimNativeMonoBuffer(decoded, EXPECTED_DURATION);
+                    this.currentBuffer = playbackBuffer;
+                    this.pauseTime = 0;
+                    this.isPlaying = false;
+                    if (onComplete) onComplete(playbackBuffer);
+                } catch (decErr) {
+                    if (onError) onError(decErr);
+                }
             };
 
             this.mediaRecorder.start(100);
@@ -256,9 +318,17 @@ export class AudioEngine {
     }
 
     // --- PLAYBACK ENGINE ---
-    play(onUpdate, onEnded) {
+    async play(onUpdate, onEnded) {
         if (!this.currentBuffer) return;
         this.initContext();
+        if (this.sourceNode) {
+            this.sourceNode.onended = null;
+            try { this.sourceNode.stop(); this.sourceNode.disconnect(); } catch (e) {}
+            this.sourceNode = null;
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+            try { await this.ctx.resume(); } catch (_) {}
+        }
         this.onPlaybackUpdate = onUpdate;
         this.onPlaybackEnded = onEnded;
 
@@ -266,7 +336,8 @@ export class AudioEngine {
         this.sourceNode.buffer = this.currentBuffer;
         this.sourceNode.connect(this.ctx.destination);
 
-        const offset = this.pauseTime % this.currentBuffer.duration;
+        const dur = this.currentBuffer.duration || EXPECTED_DURATION;
+        const offset = (this.pauseTime >= dur - 0.01 || this.pauseTime < 0) ? 0 : this.pauseTime;
         this.sourceNode.start(0, offset);
         this.startTime = this.ctx.currentTime - offset;
         this.isPlaying = true;

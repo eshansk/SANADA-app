@@ -25,6 +25,7 @@ Supports:
 """
 
 import os
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import sys
 import io
 import uuid
@@ -1024,6 +1025,8 @@ class SANADAPipeline:
                 self.device = torch.device("cuda:0")
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 self.device = torch.device("mps")
+            elif hasattr(torch, "xpu") and torch.xpu.is_available():
+                self.device = torch.device("xpu:0")
             else:
                 self.device = torch.device("cpu")
         else:
@@ -1111,7 +1114,11 @@ class SANADAPipeline:
         try:
             ckpt = load_checkpoint_cpu(ckpt_path)
             source_repo = ckpt.get("source_repo", "speechbrain/sepformer-libri2mix")
-            native_sr = int(ckpt.get("native_sample_rate", ckpt.get("sample_rate", 8000)))
+            raw_sr = ckpt.get("native_sample_rate", ckpt.get("sample_rate", None))
+            if any(tag in str(source_repo).lower() for tag in ("libri2mix", "libri3mix", "wsj02mix", "wsj03mix")):
+                native_sr = 8000
+            else:
+                native_sr = int(raw_sr) if raw_sr else 8000
             max_spks = int(ckpt.get("max_sources", 2))
             repo_slug = source_repo.replace("/", "_")
             if max_spks > 3 or "4spk" in filename.lower():
@@ -1582,7 +1589,10 @@ class SANADAPipeline:
                         ck = w_wav * ck + w_ast * float(ast_env_count) + bias
                     cal_k_list.append(ck)
                 cal_k = float(np.percentile(cal_k_list, 75))
-                predicted_k = int(np.clip(np.round(cal_k), 1, 32))
+                if ast_env_count is not None and int(ast_env_count) > 0:
+                    predicted_k = max(1, int(ast_env_count))
+                else:
+                    predicted_k = int(np.clip(np.round(cal_k), 1, 9))
                 domain_str = "environmental"
 
             raw_k = float(np.percentile(raw_k_list, 75))

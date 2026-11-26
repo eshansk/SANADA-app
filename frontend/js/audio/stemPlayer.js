@@ -316,11 +316,15 @@ export class StemPlayerMatrix {
             const trackId = String(stem.channel);
             if (!this.firstTrackId) this.firstTrackId = trackId;
 
-            const rawUrl = stem.url || stem.audio_data_url || '';
-            const isAbsolute = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') || rawUrl.startsWith('data:') || rawUrl.startsWith('blob:');
-            const fullUrl = isAbsolute
-                ? rawUrl
-                : `${effectiveBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+            const primaryRaw = stem.audio_data_url || stem.url || '';
+            const secondaryRaw = (stem.audio_data_url && stem.url && stem.url !== stem.audio_data_url) ? stem.url : '';
+            const resolveUrl = (raw) => {
+                if (!raw) return '';
+                if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
+                return `${effectiveBase}${raw.startsWith('/') ? '' : '/'}${raw}`;
+            };
+            const fullUrl = resolveUrl(primaryRaw);
+            const fallbackUrl = resolveUrl(secondaryRaw);
 
             const sisdr = (stem.si_sdr_estimate_db !== undefined && stem.si_sdr_estimate_db !== null)
                 ? Number(stem.si_sdr_estimate_db)
@@ -374,6 +378,8 @@ export class StemPlayerMatrix {
                 label: stem.assigned_tag || stem.filename || `CH ${stem.channel}`,
                 isMix: false,
                 url: fullUrl,
+                fallbackUrl,
+                loadPromise: null,
                 filename: safeFilename,
                 buffer: null,
                 gainNode: stemGain,
@@ -421,36 +427,59 @@ export class StemPlayerMatrix {
         }
     }
 
+    async _fetchArrayBuffer(url) {
+        if (url.startsWith('data:')) {
+            const commaIdx = url.indexOf(',');
+            const b64 = commaIdx >= 0 ? url.slice(commaIdx + 1) : url;
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return bytes.buffer;
+        }
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.arrayBuffer();
+    }
+
     async _loadAllStemBuffers(stemsList) {
         if (!this.audioCtx) return;
 
-        stemsList.forEach(async (stem) => {
+        stemsList.forEach((stem) => {
             const trackId = String(stem.channel);
             const track = this.tracks.get(trackId);
             if (!track) return;
 
-            try {
-                const resp = await fetch(track.url);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const arrayBuffer = await resp.arrayBuffer();
-                const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+            track.loadPromise = (async () => {
+                const candidateUrls = [track.url, track.fallbackUrl].filter(Boolean);
+                for (const candidateUrl of candidateUrls) {
+                    try {
+                        const arrayBuffer = await this._fetchArrayBuffer(candidateUrl);
+                        const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer.slice(0));
 
-                track.buffer = audioBuffer;
-                track.peaks = computePeaksFromBuffer(audioBuffer);
-                if (audioBuffer.duration > this.duration) {
-                    this.duration = audioBuffer.duration;
-                    if (this.timeDisplay) {
-                        this.timeDisplay.textContent = `0.00 / ${this.duration.toFixed(2)}s`;
+                        track.buffer = audioBuffer;
+                        track.peaks = computePeaksFromBuffer(audioBuffer);
+                        if (audioBuffer.duration > this.duration) {
+                            this.duration = audioBuffer.duration;
+                            if (this.timeDisplay) {
+                                this.timeDisplay.textContent = `0.00 / ${this.duration.toFixed(2)}s`;
+                            }
+                        }
+                        this.drawTrackWaveform(track, 0);
+                        return audioBuffer;
+                    } catch (err) {
+                        console.warn(`[StemPlayer] Stem decode failed for ${trackId}:`, err);
                     }
                 }
-                this.drawTrackWaveform(track, 0);
-            } catch (err) {
+
                 // Graceful fallback to hidden HTML audio element without throwing
+                if (track.audioEl && track.fallbackUrl && track.audioEl.src !== track.fallbackUrl) {
+                    track.audioEl.src = track.fallbackUrl;
+                }
                 track.isAudioFallback = true;
-                // Generate a visual placeholder envelope
                 track.peaks = this._generateFallbackPeaks(180, stem.channel);
                 this.drawTrackWaveform(track, 0);
-            }
+                return null;
+            })();
         });
     }
 
@@ -536,6 +565,10 @@ export class StemPlayerMatrix {
 
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
             try { await this.audioCtx.resume(); } catch (_) {}
+        }
+
+        if (!target.buffer && target.loadPromise) {
+            try { await target.loadPromise; } catch (_) {}
         }
 
         // Stop any previously playing sources so this track plays cleanly
@@ -734,6 +767,9 @@ export class StemPlayerMatrix {
                 await this.audioCtx.resume();
             } catch (_) {}
         }
+
+        await Promise.all(Array.from(this.tracks.values()).map(t => t.loadPromise).filter(Boolean));
+        if (this.isPlaying) return;
 
         this.isPlaying = true;
         if (this.masterPlayBtn) {

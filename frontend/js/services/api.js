@@ -6,6 +6,15 @@
 
 import { API_BASE } from '../config.js';
 
+async function _throwBackendError(res) {
+    let detail = `HTTP ${res.status}`;
+    try {
+        const errJson = await res.json();
+        if (errJson?.detail) detail = `${detail}: ${errJson.detail}`;
+    } catch (_) {}
+    throw new Error(`Inference request failed (${detail})`);
+}
+
 export const API = {
     async getHealth() {
         const res = await fetch(`${API_BASE}/api/health`);
@@ -37,7 +46,7 @@ export const API = {
             method: 'POST',
             body: formData
         });
-        if (!res.ok) throw new Error(`Inference request failed: HTTP ${res.status}`);
+        if (!res.ok) await _throwBackendError(res);
         return await res.json();
     },
 
@@ -49,7 +58,7 @@ export const API = {
             method: 'POST',
             body: formData
         });
-        if (!res.ok) throw new Error(`Live inference failed: HTTP ${res.status}`);
+        if (!res.ok) await _throwBackendError(res);
         return await res.json();
     },
 

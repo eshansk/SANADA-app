@@ -2,9 +2,13 @@
 """
 setup_sanada.py
 ===============
-Universal cross-platform setup & launcher for SANADA SOTA Wave 1-4.
-Works across Windows, macOS (Apple Silicon & Intel), and Linux/WSL
-on NVIDIA CUDA, Apple Silicon MPS, AMD ROCm (Linux), Intel XPU, and CPU-only machines.
+Universal cross-OS, cross-CPU, cross-GPU setup & launcher for SANADA SOTA Wave 1-4.
+Auto-detects and installs hardware-matched PyTorch for:
+  - NVIDIA GeForce / RTX / GTX / Workstation GPUs (Windows, Linux, WSL2 -> CUDA)
+  - Apple Silicon M1-M5 GPUs (macOS -> Metal MPS + PYTORCH_ENABLE_MPS_FALLBACK=1)
+  - AMD Radeon GPUs (Linux -> ROCm HIP)
+  - Intel Arc / Core Ultra GPUs (Windows, Linux -> Intel XPU)
+  - Any x86_64 / ARM64 CPU-only laptop (lightweight CPU wheel + Fast-CPU mode)
 
 Uses ONLY the Python standard library so teammates can run it right after `git pull`.
 """
@@ -12,6 +16,7 @@ Uses ONLY the Python standard library so teammates can run it right after `git p
 import os
 import re
 import sys
+import json
 import stat
 import shutil
 import argparse
@@ -25,22 +30,18 @@ CKPT_DIR = BASE_DIR / "models" / "checkpoints"
 VENV_DIR = BASE_DIR / ".venv"
 REQ_FILE = BASE_DIR / "requirements.txt"
 
-# Exact filename -> target relative path inside models/checkpoints/
 EXPECTED_FILES: Dict[str, str] = {
-    # Wave 1: Session E1 & Session A+
     "mossformer2_speech_vs_env_16k.pt": "session_e1/mossformer2_speech_vs_env_16k.pt",
     "sessionAplus_melati_eat_large.pt": "session_a_plus/sessionAplus_melati_eat_large.pt",
     "sessionAplus_sslam_as2m.pt": "session_a_plus/sessionAplus_sslam_as2m.pt",
     "sessionAplus_wavlm_large.pt": "session_a_plus/sessionAplus_wavlm_large.pt",
     "sessionAplus_meta_calibrator.json": "session_a_plus/sessionAplus_meta_calibrator.json",
-    # Wave 2: Session B
     "sessionB_melati_eat_large_fsd32.pt": "session_b/sessionB_melati_eat_large_fsd32.pt",
     "sessionB_sslam_as2m_fsd32.pt": "session_b/sessionB_sslam_as2m_fsd32.pt",
     "sessionB_ast13_fsd32.pt": "session_b/sessionB_ast13_fsd32.pt",
     "sessionB_ced_base_fsd32.pt": "session_b/sessionB_ced_base_fsd32.pt",
     "sessionB_meta_calibrator.json": "session_b/sessionB_meta_calibrator.json",
     "sessionB_count_meta_models.pkl": "session_b/sessionB_count_meta_models.pkl",
-    # Wave 3: Session C1, C2, D, E2
     "mossformer2_2spk_spkid_16k.pt": "session_c1/mossformer2_2spk_spkid_16k.pt",
     "mossformer2_3spk_spkid_16k.pt": "session_c1/mossformer2_3spk_spkid_16k.pt",
     "mossformer2_4spk_spkid_16k.pt": "session_c2/mossformer2_4spk_spkid_16k.pt",
@@ -48,7 +49,6 @@ EXPECTED_FILES: Dict[str, str] = {
     "clapsep_lora_32class_env_16k.pt": "session_e2/clapsep_lora_32class_env_16k.pt",
     "sessionE2_clapsep_config.json": "session_e2/sessionE2_clapsep_config.json",
     "sessionE2_class_prompts.json": "session_e2/sessionE2_class_prompts.json",
-    # Wave 4: Session F
     "sessionF_pipeline_config.json": "session_f/sessionF_pipeline_config.json",
     "sessionF_master_benchmarks.json": "session_f/sessionF_master_benchmarks.json",
 }
@@ -75,12 +75,16 @@ def run_cmd(cmd: List[str], env: Optional[Dict[str, str]] = None, check: bool = 
 
 
 def detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
-    """Checks nvidia-smi and returns max driver-supported (major, minor) CUDA version."""
+    """Checks nvidia-smi (PATH, Windows System32, WSL2 /usr/lib/wsl/lib) for driver CUDA version."""
     nvsmi = shutil.which("nvidia-smi")
-    if not nvsmi and os.name == "nt":
-        win_cand = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe"
-        if win_cand.is_file():
-            nvsmi = str(win_cand)
+    if not nvsmi:
+        for cand in (
+            Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe",
+            Path("/usr/lib/wsl/lib/nvidia-smi"),
+        ):
+            if cand.is_file():
+                nvsmi = str(cand)
+                break
     if not nvsmi:
         return None
     try:
@@ -96,7 +100,6 @@ def detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
 
 
 def detect_amd_rocm() -> Optional[str]:
-    """Detects AMD ROCm on Linux and returns version string if available."""
     if platform.system() != "Linux":
         return None
     ver_file = Path("/opt/rocm/.info/version")
@@ -107,11 +110,35 @@ def detect_amd_rocm() -> Optional[str]:
     return None
 
 
+def detect_intel_arc_gpu() -> Optional[str]:
+    """Auto-detects Intel Arc / Core Ultra Arc GPUs (supports PyTorch XPU) while skipping legacy UHD/Iris."""
+    sys_name = platform.system()
+    try:
+        if sys_name == "Windows":
+            cmd = ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_VideoController).Name"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if "intel" in line.lower() and "arc" in line.lower():
+                        return line.strip()
+        elif sys_name == "Linux" and shutil.which("lspci"):
+            res = subprocess.run(["lspci"], capture_output=True, text=True, timeout=8)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    low = line.lower()
+                    if ("vga" in low or "3d" in low or "display" in low) and "intel" in low and "arc" in low:
+                        return line.strip()
+    except Exception:
+        pass
+    return None
+
+
 def _cuda_index_cascade(cuda_ver: Tuple[int, int]) -> List[Optional[str]]:
     if cuda_ver >= (12, 8):
         return [
             "https://download.pytorch.org/whl/cu128",
             "https://download.pytorch.org/whl/cu126",
+            "https://download.pytorch.org/whl/cu124",
             None,
         ]
     if cuda_ver >= (12, 6):
@@ -133,10 +160,6 @@ def _cuda_index_cascade(cuda_ver: Tuple[int, int]) -> List[Optional[str]]:
 
 
 def detect_hardware_backend(requested: str = "auto") -> Tuple[str, str, List[Optional[str]]]:
-    """
-    Returns (backend_name, description, candidate_pytorch_index_urls).
-    None in candidate_pytorch_index_urls means standard PyPI default index.
-    """
     sys_name = platform.system()
     arch = platform.machine().lower()
     req = requested.strip().lower()
@@ -145,25 +168,16 @@ def detect_hardware_backend(requested: str = "auto") -> Tuple[str, str, List[Opt
         if sys_name == "Darwin":
             return ("cpu", "macOS CPU (forced)", [None])
         return ("cpu", f"{sys_name} CPU-only wheel (lightweight)", ["https://download.pytorch.org/whl/cpu", None])
-
     if req == "mps":
         return ("mps", "Apple Silicon MPS (PyPI macOS wheel)", [None])
-
     if req == "xpu":
-        return ("xpu", "Intel Arc / Core Ultra XPU", ["https://download.pytorch.org/whl/xpu", None])
-
+        return ("xpu", "Intel Arc / Core Ultra XPU", ["https://download.pytorch.org/whl/xpu", "https://download.pytorch.org/whl/cpu", None])
     if req == "rocm":
-        return (
-            "rocm",
-            "AMD ROCm GPU (Linux)",
-            ["https://download.pytorch.org/whl/rocm7.2", "https://download.pytorch.org/whl/rocm6.4", None],
-        )
-
+        return ("rocm", "AMD ROCm GPU (Linux)", ["https://download.pytorch.org/whl/rocm7.2", "https://download.pytorch.org/whl/rocm6.4", None])
     if req == "cuda":
         cuda_ver = detect_nvidia_cuda_version() or (12, 8)
         return ("cuda", f"NVIDIA CUDA (driver supports <= {cuda_ver[0]}.{cuda_ver[1]})", _cuda_index_cascade(cuda_ver))
 
-    # Auto-detection across OS / CPU / GPU
     if sys_name == "Darwin":
         if arch in ("arm64", "aarch64"):
             return ("mps", "macOS Apple Silicon (Metal MPS GPU acceleration)", [None])
@@ -180,6 +194,14 @@ def detect_hardware_backend(requested: str = "auto") -> Tuple[str, str, List[Opt
                 "rocm",
                 f"Linux AMD ROCm GPU ({rocm_ver})",
                 ["https://download.pytorch.org/whl/rocm7.2", "https://download.pytorch.org/whl/rocm6.4", "https://download.pytorch.org/whl/cpu"],
+            )
+
+        arc_name = detect_intel_arc_gpu()
+        if arc_name is not None:
+            return (
+                "xpu",
+                f"{sys_name} Intel Arc GPU ({arc_name})",
+                ["https://download.pytorch.org/whl/xpu", "https://download.pytorch.org/whl/cpu", None],
             )
 
         if arch in ("x86_64", "amd64"):
@@ -272,17 +294,57 @@ def place_checkpoints(models_dir: Optional[str], move_files: bool = False) -> No
         print("         Tip: re-run with --models-dir /path/to/downloaded_hf_models")
 
 
-def install_pytorch_for_hardware(venv_py: Path, index_urls: List[Optional[str]]) -> None:
-    """Installs matching torch + torchaudio wheel first, with automatic fallback cascade."""
+def installed_torch_matches_backend(venv_py: Path, target_backend: str) -> bool:
+    """Checks whether torch + torchaudio in venv_py already match the detected GPU/CPU backend."""
+    probe = (
+        "import json, torch, torchaudio; "
+        "print(json.dumps({"
+        "'cuda': bool(torch.cuda.is_available()), "
+        "'mps': bool(hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()), "
+        "'xpu': bool(hasattr(torch, 'xpu') and torch.xpu.is_available()), "
+        "'ver': torch.__version__"
+        "}))"
+    )
+    res = subprocess.run([str(venv_py), "-c", probe], capture_output=True, text=True)
+    if res.returncode != 0:
+        return False
+    try:
+        info = json.loads(res.stdout.strip().splitlines()[-1])
+    except Exception:
+        return False
+    if target_backend in ("cuda", "rocm"):
+        return bool(info.get("cuda"))
+    if target_backend == "mps":
+        return bool(info.get("mps"))
+    if target_backend == "xpu":
+        return bool(info.get("xpu"))
+    return True
+
+
+def install_pytorch_for_hardware(venv_py: Path, target_backend: str, index_urls: List[Optional[str]]) -> None:
+    """Installs or force-upgrades torch + torchaudio so detected laptop GPUs are actually activated."""
+    if installed_torch_matches_backend(venv_py, target_backend):
+        print(f"  [OK] Existing PyTorch in .venv already matches backend={target_backend}.")
+        return
+
+    # Remove mismatched CPU-only torch/torchaudio/torchvision first if present so pip does not skip GPU wheel
+    run_cmd([str(venv_py), "-m", "pip", "uninstall", "-y", "torch", "torchaudio", "torchvision"], check=False)
+
     for idx_url in index_urls:
-        cmd = [str(venv_py), "-m", "pip", "install", "torch>=2.0.0", "torchaudio>=2.0.0"]
+        cmd = [str(venv_py), "-m", "pip", "install", "--no-cache-dir", "torch>=2.0.0", "torchaudio>=2.0.0", "torchvision"]
         if idx_url:
             cmd.extend(["--index-url", idx_url])
         rc = run_cmd(cmd, check=False)
         if rc == 0:
-            return
-        print(f"  [WARN] PyTorch install failed for index={idx_url or 'PyPI'}; trying next fallback...")
-    raise SystemExit("[ERROR] Could not install compatible torch & torchaudio wheels for this Python/OS.")
+            if target_backend == "cpu" or installed_torch_matches_backend(venv_py, target_backend):
+                return
+            print(f"  [WARN] Installed wheel from {idx_url or 'PyPI'} did not activate {target_backend}; trying next fallback...")
+            run_cmd([str(venv_py), "-m", "pip", "uninstall", "-y", "torch", "torchaudio", "torchvision"], check=False)
+        else:
+            print(f"  [WARN] PyTorch install failed for index={idx_url or 'PyPI'}; trying next fallback...")
+
+    # Final safety fallback so installation never leaves .venv broken without torch
+    run_cmd([str(venv_py), "-m", "pip", "install", "torch>=2.0.0", "torchaudio>=2.0.0", "torchvision"])
 
 
 def read_non_torch_requirements() -> List[str]:
@@ -298,7 +360,7 @@ def read_non_torch_requirements() -> List[str]:
     return reqs
 
 
-def setup_virtualenv(index_urls: List[Optional[str]], skip_install: bool = False) -> Path:
+def setup_virtualenv(target_backend: str, index_urls: List[Optional[str]], skip_install: bool = False) -> Path:
     banner("STEP 3/5: Creating Virtual Environment & Installing Hardware-Matched Dependencies")
     venv_py = get_venv_python(VENV_DIR)
     if not venv_py.is_file():
@@ -315,12 +377,13 @@ def setup_virtualenv(index_urls: List[Optional[str]], skip_install: bool = False
         raise SystemExit(f"[ERROR] requirements.txt not found at {REQ_FILE}")
 
     run_cmd([str(venv_py), "-m", "pip", "install", "--upgrade", "pip"], check=False)
-    install_pytorch_for_hardware(venv_py, index_urls)
+    install_pytorch_for_hardware(venv_py, target_backend, index_urls)
 
     other_reqs = read_non_torch_requirements()
     if other_reqs:
         run_cmd([str(venv_py), "-m", "pip", "install", *other_reqs])
 
+    run_cmd([str(venv_py), "-m", "pip", "install", "yamlargparse", "rotary-embedding-torch", "torchinfo"])
     run_cmd([str(venv_py), "-m", "pip", "install", "--no-deps", "clearvoice"])
     return venv_py
 
@@ -328,6 +391,7 @@ def setup_virtualenv(index_urls: List[Optional[str]], skip_install: bool = False
 def verify_environment(venv_py: Path) -> None:
     banner("STEP 4/5: Verifying Imports, Accelerator Telemetry & Offline Checkpoints")
     check_snippet = (
+        "import os; os.environ.setdefault('PYTORCH_ENABLE_MPS_FALLBACK', '1'); "
         "import torch, torchaudio, fastapi, uvicorn, transformers, clearvoice, timm, librosa, soundfile; "
         "from models.device_utils import select_compute_device, get_device_telemetry; "
         "dev = select_compute_device(); tel = get_device_telemetry(dev); "
@@ -346,8 +410,7 @@ def launch_server(venv_py: Path, port: int = 8000) -> None:
     env = os.environ.copy()
     env["SANADA_DEPLOY_MODE"] = "local"
     env["HF_HOME"] = str(CKPT_DIR / "hf_cache")
-    if platform.system() == "Darwin":
-        env.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+    env.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     run_cmd([str(venv_py), "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", str(port)], env=env)
 
 
@@ -396,7 +459,7 @@ def main() -> None:
         launch_server(active_py, port=args.port)
         return
 
-    _, _, index_urls = check_prerequisites(args.backend)
+    backend, _, index_urls = check_prerequisites(args.backend)
     place_checkpoints(args.models_dir, move_files=args.move)
 
     if args.check_only:
@@ -406,7 +469,7 @@ def main() -> None:
         finalize_launcher(active_py, auto_start=False, port=args.port)
         return
 
-    venv_py = setup_virtualenv(index_urls=index_urls, skip_install=args.skip_install)
+    venv_py = setup_virtualenv(target_backend=backend, index_urls=index_urls, skip_install=args.skip_install)
     verify_environment(venv_py)
     finalize_launcher(venv_py, auto_start=args.start, port=args.port)
 

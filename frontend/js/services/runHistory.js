@@ -23,6 +23,121 @@ import { showConfirmPopup, showPromptPopup } from '../ui/popup.js';
 import { API } from './api.js';
 
 // =============================================================================
+// 0. INDEXEDDB AUDIO BLOB CACHE (Permanent local playback for history runs)
+// =============================================================================
+const AUDIO_CACHE_DB = 'sanada_audio_cache_v1';
+const AUDIO_CACHE_STORE = 'run_audio';
+const AUDIO_CACHE_MAX_ENTRIES = 10;
+
+function openAudioCacheDB() {
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    return new Promise((resolve) => {
+        try {
+            const req = indexedDB.open(AUDIO_CACHE_DB, 1);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(AUDIO_CACHE_STORE)) {
+                    db.createObjectStore(AUDIO_CACHE_STORE, { keyPath: 'runId' });
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        } catch (_) {
+            resolve(null);
+        }
+    });
+}
+
+async function saveRunAudioToCache(runId, { inputBlob = null, stemBlobs = {} } = {}) {
+    if (!runId) return;
+    const db = await openAudioCacheDB();
+    if (!db) return;
+    try {
+        await new Promise((resolve) => {
+            const tx = db.transaction(AUDIO_CACHE_STORE, 'readwrite');
+            const store = tx.objectStore(AUDIO_CACHE_STORE);
+            store.put({
+                runId: String(runId),
+                inputBlob: (inputBlob && inputBlob.size > 0) ? inputBlob : null,
+                stemBlobs: stemBlobs || {},
+                updatedAt: Date.now()
+            });
+            const allReq = store.getAll();
+            allReq.onsuccess = () => {
+                const items = Array.isArray(allReq.result) ? allReq.result : [];
+                if (items.length > AUDIO_CACHE_MAX_ENTRIES) {
+                    items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                    items.slice(AUDIO_CACHE_MAX_ENTRIES).forEach((old) => {
+                        try { store.delete(old.runId); } catch (_) {}
+                    });
+                }
+            };
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        });
+    } catch (_) {
+        // Ignore private browsing / IDB quota failures gracefully
+    } finally {
+        try { db.close(); } catch (_) {}
+    }
+}
+
+export async function loadRunAudioFromCache(runId) {
+    if (!runId) return null;
+    const db = await openAudioCacheDB();
+    if (!db) return null;
+    try {
+        return await new Promise((resolve) => {
+            const tx = db.transaction(AUDIO_CACHE_STORE, 'readonly');
+            const store = tx.objectStore(AUDIO_CACHE_STORE);
+            const req = store.get(String(runId));
+            req.onsuccess = () => {
+                const rec = req.result;
+                resolve(rec ? { inputBlob: rec.inputBlob || null, stemBlobs: rec.stemBlobs || {} } : null);
+            };
+            req.onerror = () => resolve(null);
+        });
+    } catch (_) {
+        return null;
+    } finally {
+        try { db.close(); } catch (_) {}
+    }
+}
+
+async function deleteRunAudioFromCache(runId) {
+    if (!runId) return;
+    const db = await openAudioCacheDB();
+    if (!db) return;
+    try {
+        await new Promise((resolve) => {
+            const tx = db.transaction(AUDIO_CACHE_STORE, 'readwrite');
+            tx.objectStore(AUDIO_CACHE_STORE).delete(String(runId));
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        });
+    } catch (_) {
+    } finally {
+        try { db.close(); } catch (_) {}
+    }
+}
+
+async function clearRunAudioCache() {
+    const db = await openAudioCacheDB();
+    if (!db) return;
+    try {
+        await new Promise((resolve) => {
+            const tx = db.transaction(AUDIO_CACHE_STORE, 'readwrite');
+            tx.objectStore(AUDIO_CACHE_STORE).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        });
+    } catch (_) {
+    } finally {
+        try { db.close(); } catch (_) {}
+    }
+}
+
+// =============================================================================
 // 1. USER INFERENCE PREFERENCES (Task, Mode, Threshold, All 4 Stems)
 // =============================================================================
 export const DEFAULT_INFERENCE_PREFERENCES = {
@@ -193,7 +308,11 @@ function stripLargeAudioData(runObj) {
         rj.results?.source_separation?.stems,
         rj.results?.separated_stems,
         rj.source_separation?.stems,
-        rj.separated_stems
+        rj.separated_stems,
+        rj.results?.env_separation?.env_stems,
+        rj.results?.env_stems,
+        rj.env_separation?.env_stems,
+        rj.env_stems
     ];
     stemArrays.forEach(arr => {
         if (Array.isArray(arr)) {
@@ -338,18 +457,50 @@ async function blobToDataUrl(blob) {
     });
 }
 
+function dataUrlToBlob(dataUrl) {
+    try {
+        const [header, b64] = String(dataUrl).split(',', 2);
+        const mimeMatch = header && header.match(/data:([^;]+)/);
+        const mime = mimeMatch ? mimeMatch[1] : 'audio/wav';
+        const bin = atob(b64 || '');
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+    } catch (_) {
+        return null;
+    }
+}
+
+function stripDuplicateStemAudio(stemsList) {
+    if (!Array.isArray(stemsList)) return [];
+    return stemsList.map((s) => {
+        const copy = { ...s };
+        delete copy.audio_data_url;
+        if (!copy.url || copy.url.startsWith('data:') || copy.url.startsWith('blob:')) {
+            copy.url = `/static/stems/${copy.filename || ''}`;
+        }
+        return copy;
+    });
+}
+
 /**
- * Embeds stem audio files (and input mixture if present) as base64 Data URLs.
- * This guarantees the output audio files are stored permanently in Supabase & localStorage.
+ * Fetches & caches speech and environmental stem audio Blobs, embedding base64 Data URLs
+ * once in resultJson (keeping relative paths on duplicates to avoid inflating storage).
  */
-async function prepareRunAudioData(resultJson, activeFile = null) {
-    if (!resultJson) return resultJson;
-    let cloned = JSON.parse(JSON.stringify(resultJson));
-    const stems = cloned.results?.source_separation?.stems 
-               || cloned.results?.separated_stems 
-               || cloned.separated_stems 
-               || cloned.source_separation?.stems 
+async function prepareRunAudioData(resultJson, activeFile = null, stemBlobsOut = null) {
+    const stemBlobs = (stemBlobsOut && typeof stemBlobsOut === 'object') ? stemBlobsOut : {};
+    if (!resultJson) return { processedJson: resultJson, stemBlobs };
+    const cloned = JSON.parse(JSON.stringify(resultJson));
+    const stems = cloned.results?.source_separation?.stems
+               || cloned.results?.separated_stems
+               || cloned.separated_stems
+               || cloned.source_separation?.stems
                || [];
+    const envStems = cloned.results?.env_separation?.env_stems
+                  || cloned.results?.env_stems
+                  || cloned.env_separation?.env_stems
+                  || cloned.env_stems
+                  || [];
 
     // Strip bulky raw mixtures and float arrays that inflate payloads past PostgREST / localStorage limits
     delete cloned.all_4_raw_stems;
@@ -359,38 +510,71 @@ async function prepareRunAudioData(resultJson, activeFile = null) {
         delete cloned.results.input_audio_data_url;
     }
 
-    await Promise.all(stems.map(async (stem) => {
-        let rawSrc = stem.audio_data_url || stem.url || stem.stem_url || stem.filename;
-        if (!rawSrc) return;
-        if (rawSrc.startsWith('data:')) {
-            stem.audio_data_url = rawSrc;
-            return;
-        }
-        const fullUrl = API.getStemUrl(rawSrc);
-        try {
-            const resp = await fetch(fullUrl);
-            if (resp.ok) {
-                const blob = await resp.blob();
-                const dataUrl = await blobToDataUrl(blob);
-                stem.audio_data_url = dataUrl;
-                // Preserve relative URL on stem.url to avoid duplicating megabytes of base64
+    const hydrateStemArray = async (stemArray) => {
+        await Promise.all(stemArray.map(async (stem, idx) => {
+            const rawSrc = stem.audio_data_url || stem.url || stem.stem_url || stem.filename;
+            if (!rawSrc) return;
+            const stemKey = stem.filename || `stem_${stem.channel || (idx + 1)}.wav`;
+            if (rawSrc.startsWith('data:')) {
+                stem.audio_data_url = rawSrc;
+                const decodedBlob = dataUrlToBlob(rawSrc);
+                if (decodedBlob && stemKey) stemBlobs[stemKey] = decodedBlob;
                 if (!stem.url || stem.url.startsWith('data:')) {
                     stem.url = `/static/stems/${stem.filename || ''}`;
                 }
+                return;
             }
-        } catch (err) {
-            console.warn('[RunHistory] Stem fetch warning for permanent storage:', rawSrc, err);
-        }
-    }));
+            const fullUrl = API.getStemUrl(rawSrc);
+            try {
+                const resp = await fetch(fullUrl);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    if (stemKey) stemBlobs[stemKey] = blob;
+                    const dataUrl = await blobToDataUrl(blob);
+                    stem.audio_data_url = dataUrl;
+                    // Preserve relative URL on stem.url to avoid duplicating megabytes of base64
+                    if (!stem.url || stem.url.startsWith('data:')) {
+                        stem.url = `/static/stems/${stem.filename || ''}`;
+                    }
+                }
+            } catch (err) {
+                console.warn('[RunHistory] Stem fetch warning for permanent storage:', rawSrc, err);
+            }
+        }));
+    };
+
+    await Promise.all([hydrateStemArray(stems), hydrateStemArray(envStems)]);
+
+    const speechRel = stripDuplicateStemAudio(stems);
+    const envRel = stripDuplicateStemAudio(envStems);
 
     if (cloned.results) {
         if (!cloned.results.source_separation) cloned.results.source_separation = {};
         cloned.results.source_separation.stems = stems;
-        cloned.results.separated_stems = stems;
-    }
-    cloned.separated_stems = stems;
+        cloned.results.separated_stems = speechRel;
+        if (cloned.source_separation?.stems) cloned.source_separation.stems = speechRel;
+        cloned.separated_stems = speechRel;
 
-    return cloned;
+        if (envStems.length > 0 || cloned.results.env_separation || cloned.results.env_stems) {
+            if (!cloned.results.env_separation) cloned.results.env_separation = {};
+            cloned.results.env_separation.env_stems = envStems;
+            if ('env_stems' in cloned.results) cloned.results.env_stems = envRel;
+            if (cloned.env_separation?.env_stems) cloned.env_separation.env_stems = envRel;
+            if ('env_stems' in cloned) cloned.env_stems = envRel;
+        }
+    } else {
+        if (!cloned.source_separation) cloned.source_separation = {};
+        cloned.source_separation.stems = stems;
+        cloned.separated_stems = speechRel;
+
+        if (envStems.length > 0 || cloned.env_separation || cloned.env_stems) {
+            if (!cloned.env_separation) cloned.env_separation = {};
+            cloned.env_separation.env_stems = envStems;
+            if ('env_stems' in cloned) cloned.env_stems = envRel;
+        }
+    }
+
+    return { processedJson: cloned, stemBlobs };
 }
 
 /**
@@ -423,14 +607,18 @@ export async function saveRun(filename, mode, threshold, task, all4Stems, result
     saveLocalRuns(updated);
     window.dispatchEvent(new CustomEvent('sanada:runHistoryChanged', { detail: { runs: updated } }));
 
-    // 2. Encode stems asynchronously
+    // 2. Encode stems asynchronously & cache Blobs in IndexedDB
     let processedJson = resultJson || {};
+    let stemBlobs = {};
     try {
-        processedJson = await prepareRunAudioData(resultJson, activeFile);
+        const prepared = await prepareRunAudioData(resultJson, activeFile);
+        processedJson = prepared?.processedJson || processedJson;
+        stemBlobs = prepared?.stemBlobs || {};
         newRun.resultJson = processedJson;
         const currentRuns = loadLocalRuns();
         const merged = currentRuns.map(r => r.id === newRun.id ? newRun : r);
         saveLocalRuns(merged);
+        await saveRunAudioToCache(newRun.id, { inputBlob: activeFile, stemBlobs });
     } catch (e) {
         console.warn('[RunHistory] Audio encoding notice:', e);
     }
@@ -456,6 +644,8 @@ export async function saveRun(filename, mode, threshold, task, all4Stems, result
                     newRun.id = data.run_id;
                     const finalRuns = loadLocalRuns().map(r => (r.id === tempId || r.id === newRun.id) ? newRun : r);
                     saveLocalRuns(finalRuns);
+                    await saveRunAudioToCache(newRun.id, { inputBlob: activeFile, stemBlobs });
+                    await deleteRunAudioFromCache(tempId);
                 }
             }
         } catch (err) {
@@ -551,6 +741,7 @@ export async function deleteRun(runId) {
 
     const runs = loadLocalRuns().filter(r => r.id !== runId);
     saveLocalRuns(runs);
+    await deleteRunAudioFromCache(runId);
     window.dispatchEvent(new CustomEvent('sanada:runHistoryChanged', { detail: { runs } }));
     return true;
 }
@@ -574,6 +765,7 @@ export async function clearAllRuns() {
     }
 
     saveLocalRuns([]);
+    await clearRunAudioCache();
     window.dispatchEvent(new CustomEvent('sanada:runHistoryChanged', { detail: { runs: [] } }));
     return true;
 }
@@ -755,14 +947,20 @@ export function renderRunHistoryList(containerEl, runs = []) {
         const targetRun = runs.find(r => r.id === runId);
         if (!targetRun) return;
 
-        // Click row opens directly in the Studio DAW workspace
+        // Click row opens directly in the Studio DAW workspace (make #pagePredict visible before canvas render)
         const handleOpenInStudio = (e) => {
             if (e.target.closest('[data-action="rename"], [data-action="delete"]')) return;
             e.preventDefault();
-            window.dispatchEvent(new CustomEvent('sanada:loadRun', { detail: targetRun }));
-            if (window.location.hash !== '#/predict') {
+            if (typeof window.switchRoute === 'function') {
+                window.switchRoute('predict', true);
+            } else if (window.location.hash !== '#/predict') {
                 window.location.hash = '#/predict';
             }
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('sanada:loadRun', { detail: targetRun }));
+                }, 60);
+            });
         };
 
         row.addEventListener('click', handleOpenInStudio);

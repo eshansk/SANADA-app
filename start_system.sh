@@ -9,17 +9,13 @@ set -eo pipefail
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$BASE_DIR"
 
-# Ensure user-installed binaries and virtualenv paths are accessible
-export PATH="$HOME/.local/bin:$BASE_DIR/.venv/bin:$BASE_DIR/venv/bin:$PATH"
-
-# Auto-activate virtualenv if present and not already active
-if [ -z "${VIRTUAL_ENV:-}" ]; then
-    if [ -f "$BASE_DIR/.venv/bin/activate" ]; then
-        source "$BASE_DIR/.venv/bin/activate"
-    elif [ -f "$BASE_DIR/venv/bin/activate" ]; then
-        source "$BASE_DIR/venv/bin/activate"
-    fi
+# Always prefer project-local virtualenv so hardware-matched PyTorch (.venv) is used
+if [ -f "$BASE_DIR/.venv/bin/activate" ]; then
+    source "$BASE_DIR/.venv/bin/activate"
+elif [ -f "$BASE_DIR/venv/bin/activate" ]; then
+    source "$BASE_DIR/venv/bin/activate"
 fi
+export PATH="$BASE_DIR/.venv/bin:$BASE_DIR/venv/bin:$HOME/.local/bin:$PATH"
 
 MODE="direct"
 BACKEND_ARG="http://127.0.0.1:8000"

@@ -25,6 +25,9 @@ import math
 import json
 import uuid
 import logging
+import threading
+from collections import OrderedDict
+from contextlib import nullcontext
 from typing import Optional, Dict, Any, Tuple, List, Union
 
 import numpy as np
@@ -141,15 +144,17 @@ def patch_transformers_v5_compat():
 
 
 def _fp32_ctx(device):
-    if device.type == "cuda":
+    dev_type = device.type if hasattr(device, "type") else str(device).split(":")[0]
+    if dev_type == "cuda" and torch.cuda.is_available():
         return torch.amp.autocast("cuda", enabled=False)
-    return torch.amp.autocast("cpu", enabled=False)
+    return nullcontext()
 
 
 def _autocast_ctx(device):
-    if device.type == "cuda":
+    dev_type = device.type if hasattr(device, "type") else str(device).split(":")[0]
+    if dev_type == "cuda" and torch.cuda.is_available():
         return torch.amp.autocast("cuda", dtype=torch.float16, enabled=True)
-    return torch.amp.autocast("cpu", enabled=False)
+    return nullcontext()
 
 
 def compute_kaldi_fbank_128(wav_1d: torch.Tensor, target_length: int = 1024) -> torch.Tensor:
@@ -225,6 +230,8 @@ class SubspaceDiversityBranch(nn.Module):
     @classmethod
     def _spd_logdet(cls, mat: torch.Tensor) -> torch.Tensor:
         """Exact logdet(I + alpha*C) for strictly SPD [B, 64, 64] matrices with TPU auto-probe."""
+        if mat.device.type == "mps":
+            return torch.linalg.slogdet(mat.to("cpu"))[1].to(mat.device)
         if mat.device.type != "tpu":
             return torch.linalg.slogdet(mat)[1]
         if cls._TPU_LOGDET_MODE is None:
@@ -855,8 +862,9 @@ class DualBank2DTemporalAggregator(nn.Module):
 
         f_cat = torch.cat([f_low, f_high], dim=-1).transpose(1, 2).contiguous()
         seq_in = self.temporal_proj(f_cat).transpose(1, 2).contiguous()     # [B, 64, 384]
-        with torch.amp.autocast("cuda", enabled=False):
-            self.bigru.flatten_parameters()
+        with _fp32_ctx(seq_in.device):
+            if seq_in.device.type == "cuda":
+                self.bigru.flatten_parameters()
             seq_out, _ = self.bigru(seq_in.float())                         # [B, 64, 512]
         emb_temp = self.pool_temp(seq_out)                                  # [B, 1536]
         emb_low = self.proj_low(self.pool_low(f_low))                       # [B, 256]
@@ -1305,7 +1313,7 @@ class CLAPAudioMel48k(nn.Module):
         self.target_samples_48k = 480000
 
     def forward(self, wav_16k: torch.Tensor, min_power: float = 1e-8) -> torch.Tensor:
-        with torch.amp.autocast("cuda", enabled=False):
+        with _fp32_ctx(wav_16k.device):
             w = wav_16k.float()
             rms = torch.sqrt(torch.mean(w ** 2, dim=-1, keepdim=True) + 1e-8).clamp(min=1e-3)
             w = w * (WORK_RMS / rms)
@@ -1316,10 +1324,16 @@ class CLAPAudioMel48k(nn.Module):
                 w48 = w48.repeat(1, reps)[:, :self.target_samples_48k]
             elif L > self.target_samples_48k:
                 w48 = w48[:, :self.target_samples_48k]
-            spec_pow = torch.stft(
-                w48, n_fft=1024, hop_length=480, win_length=1024,
-                window=self.mel_window, center=True, pad_mode="reflect", return_complex=True,
-            ).abs().pow(2)  # [B, 513, T]
+            if w48.device.type == "mps":
+                spec_pow = torch.stft(
+                    w48.cpu(), n_fft=1024, hop_length=480, win_length=1024,
+                    window=self.mel_window.cpu(), center=True, pad_mode="reflect", return_complex=True,
+                ).abs().pow(2).to(w48.device)  # [B, 513, T]
+            else:
+                spec_pow = torch.stft(
+                    w48, n_fft=1024, hop_length=480, win_length=1024,
+                    window=self.mel_window, center=True, pad_mode="reflect", return_complex=True,
+                ).abs().pow(2)  # [B, 513, T]
             mel = torch.matmul(spec_pow.transpose(1, 2), self.mel_filters)  # [B, T, 64]
             if mel.shape[1] < 1001:
                 mel = F.pad(mel, (0, 0, 0, 1001 - mel.shape[1]))
@@ -1369,7 +1383,7 @@ class AxialBiGRUBottleneck(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, C, Fb, Tb = x.shape
-        with torch.amp.autocast("cuda", enabled=False):
+        with _fp32_ctx(x.device):
             xf = x.float()
             for blk in self.blocks:
                 s_f = xf.permute(0, 3, 2, 1).reshape(B * Tb, Fb, C)
@@ -1544,16 +1558,23 @@ class CLAPSepLoRASeparator(nn.Module):
         e_neg: torch.Tensor = None,
     ) -> torch.Tensor:
         B, T = mix_wav.shape
-        with torch.amp.autocast("cuda", enabled=False):
+        with _fp32_ctx(mix_wav.device):
             x = mix_wav.float()
             rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + 1e-8).clamp(min=1e-4)
             x_norm = x * (WORK_RMS / rms)
 
-            X_c = torch.stft(
-                x_norm, n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
-                window=self.stft_win, return_complex=True, center=True,
-            )
-            X_ri = torch.stack([X_c.real, X_c.imag], dim=1)  # [B, 2, 513, Tf]
+            if x_norm.device.type == "mps":
+                X_c = torch.stft(
+                    x_norm.cpu(), n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
+                    window=self.stft_win.cpu(), return_complex=True, center=True,
+                )
+                X_ri = torch.stack([X_c.real, X_c.imag], dim=1).to(x_norm.device)  # [B, 2, 513, Tf]
+            else:
+                X_c = torch.stft(
+                    x_norm, n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
+                    window=self.stft_win, return_complex=True, center=True,
+                )
+                X_ri = torch.stack([X_c.real, X_c.imag], dim=1)  # [B, 2, 513, Tf]
             F_bins, T_frames = X_ri.shape[2], X_ri.shape[3]
             pad_f = (16 - (F_bins % 16)) % 16
             pad_t = (16 - (T_frames % 16)) % 16
@@ -1594,7 +1615,7 @@ class CLAPSepLoRASeparator(nn.Module):
         raw_out = self.out_head(d1)[:, :, :F_bins, :T_frames]
 
         # Pure-FP32 Scale-Equivariant Bounded Complex Ratio Mask + Complex Residual Reconstruction!
-        with torch.amp.autocast("cuda", enabled=False):
+        with _fp32_ctx(raw_out.device):
             ro = raw_out.float()
             mr = 2.0 * torch.tanh(ro[:, 0])
             mi = 2.0 * torch.tanh(ro[:, 1])
@@ -1605,11 +1626,18 @@ class CLAPSepLoRASeparator(nn.Module):
             mag_ref = torch.sqrt(xr * xr + xi * xi + 1e-8).mean(dim=(-2, -1), keepdim=True)
             yr = xr * mr - xi * mi + dr * mag_ref
             yi = xr * mi + xi * mr + di * mag_ref
-            Y_c = torch.complex(yr, yi)
-            y_norm = torch.istft(
-                Y_c, n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
-                window=self.stft_win, length=T, center=True,
-            )
+            if yr.device.type == "mps":
+                Y_c = torch.complex(yr.cpu(), yi.cpu())
+                y_norm = torch.istft(
+                    Y_c, n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
+                    window=self.stft_win.cpu(), length=T, center=True,
+                ).to(mix_wav.device)
+            else:
+                Y_c = torch.complex(yr, yi)
+                y_norm = torch.istft(
+                    Y_c, n_fft=N_FFT, hop_length=HOP_LEN, win_length=N_FFT,
+                    window=self.stft_win, length=T, center=True,
+                )
             y_out = y_norm * (rms / WORK_RMS)
         return y_out
 
@@ -1710,6 +1738,25 @@ def apply_scale_optimal_mixproj(est: np.ndarray, mix: np.ndarray) -> np.ndarray:
     return (est_g + res[None, :] / float(K)).astype(np.float32)
 
 
+def _restore_per_stem_scale(est: np.ndarray, mix: np.ndarray) -> np.ndarray:
+    """Scale-invariant per-stem diagonal Ridge projection + PCM_16 peak guard (0.0000 dB SI-SDR change)."""
+    E = est.astype(np.float64)
+    K = E.shape[0]
+    A = E @ E.T + 1e-4 * np.eye(K, dtype=np.float64)
+    b = E @ mix.astype(np.float64)
+    try:
+        g = np.linalg.solve(A, b)
+    except Exception:
+        g = np.ones(K, dtype=np.float64)
+    g = np.clip(g, 0.55, 2.5)
+    out = (est * g[:, None]).astype(np.float32)
+    for i in range(K):
+        pk = float(np.max(np.abs(out[i])))
+        if pk > 0.95:
+            out[i] = out[i] * (0.95 / pk)
+    return out
+
+
 def separate_orpit_k(
     d_infer_fn,
     mix_np: np.ndarray,
@@ -1774,13 +1821,16 @@ def separate_e2_active_classes(
             for j, cid in enumerate(active_ids):
                 if j != i:
                     neg_m[i, cid] = 1.0
-    with torch.amp.autocast("cuda", enabled=False):
+    with _fp32_ctx(device):
         est = model(mix_t, pos_ids=pos_t, neg_mask=neg_m).float().cpu().numpy().astype(np.float32)
+    est = np.nan_to_num(est, nan=0.0, posinf=0.0, neginf=0.0)
 
     # Step 1: Energy gate FIRST on raw E2 outputs (preserves -27 to -30 dB FP suppression!)
     mx_pow = float(np.mean(env_mix_np ** 2)) + 1e-12
     rel_dbs = [float(10.0 * np.log10((float(np.mean(est[i] ** 2)) + 1e-12) / mx_pow)) for i in range(M)]
     kept_idx = [i for i, db in enumerate(rel_dbs) if db >= fp_gate_db]
+    if allow_clean_m2_mixproj and len(kept_idx) == 0 and M > 0:
+        kept_idx = [i for i, db in enumerate(rel_dbs) if db >= -26.0] or [int(np.argmax(rel_dbs))]
 
     # Step 2: Apply MixProj ONLY on truly clean 2-event kept pairs (zero speech bleed, zero FP resurrection!)
     if allow_clean_m2_mixproj and M == 2 and len(kept_idx) == 2:
@@ -1896,6 +1946,66 @@ def _apply_triple_physics_gate(
 # Production SANADASOTAPipeline (Zero-Collapse, Strict Memory Discipline)
 # =============================================================================
 
+class _BoundedGPUModelCache:
+    """Thread-safe byte-bounded LRU GPU model cache (active ONLY when SANADA_DEMO_GPU_CACHE=1)."""
+
+    def __init__(self, enabled: bool, max_gb: float, device: torch.device):
+        self.enabled = bool(enabled and max_gb > 0 and device.type != "cpu")
+        self.max_bytes = int(max(0.0, float(max_gb)) * (1024 ** 3))
+        self.device = device
+        self._lock = threading.RLock()
+        self._items: "OrderedDict[str, Any]" = OrderedDict()
+        self._sizes: Dict[str, int] = {}
+        self._total_bytes: int = 0
+
+    def get(self, key: str):
+        if not self.enabled:
+            return None
+        with self._lock:
+            val = self._items.get(key)
+            if val is not None:
+                self._items.move_to_end(key)
+            return val
+
+    def put(self, key: str, obj: Any, size_bytes: int):
+        if not self.enabled:
+            return
+        sz = max(1, int(size_bytes))
+        if sz > self.max_bytes:
+            return
+        with self._lock:
+            if key in self._items:
+                self._total_bytes -= self._sizes.pop(key, 0)
+                self._items.pop(key, None)
+            evicted = False
+            while self._items and (self._total_bytes + sz > self.max_bytes):
+                old_k, old_v = self._items.popitem(last=False)
+                self._total_bytes -= self._sizes.pop(old_k, 0)
+                del old_v
+                evicted = True
+            self._items[key] = obj
+            self._sizes[key] = sz
+            self._total_bytes += sz
+        if evicted:
+            clear_device_cache(self.device)
+
+    def clear(self):
+        with self._lock:
+            self._items.clear()
+            self._sizes.clear()
+            self._total_bytes = 0
+        clear_device_cache(self.device)
+
+    def stats(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "enabled": self.enabled,
+                "cached_models": list(self._items.keys()),
+                "used_gb": round(self._total_bytes / (1024 ** 3), 2),
+                "max_gb": round(self.max_bytes / (1024 ** 3), 2),
+            }
+
+
 class SANADASOTAPipeline:
     """Unified SANADA SOTA Wave 1-4 Pipeline with exact training-matched architectures and single-model residency."""
 
@@ -1954,6 +2064,19 @@ class SANADASOTAPipeline:
         }
 
         self._load_calibrators()
+        demo_cache_on = os.getenv("SANADA_DEMO_GPU_CACHE", "0").strip() == "1"
+        try:
+            demo_cache_gb = float(os.getenv("SANADA_GPU_CACHE_MAX_GB", "6.5"))
+        except Exception:
+            demo_cache_gb = 6.5
+        self._gpu_cache = _BoundedGPUModelCache(demo_cache_on, demo_cache_gb, self.device)
+        self._infer_lock = threading.RLock()
+        if self._gpu_cache.enabled and os.getenv("SANADA_DEMO_PREWARM", "0").strip() == "1":
+            try:
+                self.prewarm_demo_models()
+            except Exception as e:
+                logger.warning(f"Demo GPU pre-warm skipped/partial: {e}")
+
         logger.info(
             f"SANADA SOTA Pipeline initialized on {self.device} "
             f"(Fast-CPU={is_fast_cpu_mode(self.device)}, Low-VRAM={is_low_vram_device(self.device)}, F={self.has_f}, E2={self.has_e2})"
@@ -2011,6 +2134,8 @@ class SANADASOTAPipeline:
                 self.pure_env_dominance_db = float(ap_cfg.get("pure_env_dominance_db", self.pure_env_dominance_db))
                 self.speech_rms_floor = float(ap_cfg.get("speech_rms_silence_floor", self.speech_rms_floor))
                 b_cfg = f_cfg.get("session_b", {})
+                if b_cfg.get("tag_simplex_weights"):
+                    self.tag_simplex_weights = [float(x) for x in b_cfg["tag_simplex_weights"]]
                 self.env_rms_floor = float(b_cfg.get("env_rms_silence_floor", self.env_rms_floor))
                 self.env_to_sp_silence_db = float(b_cfg.get("env_to_sp_silence_db", self.env_to_sp_silence_db))
                 sp_cfg = f_cfg.get("speech_separation_routing", {})
@@ -2063,28 +2188,41 @@ class SANADASOTAPipeline:
             arr = arr[:N_SAMPLES]
         return arr
 
-    # -------------------------------------------------------------------------
-    # Step 1: Session E1 Gatekeeper
-    # -------------------------------------------------------------------------
-    def separate_speech_vs_env(self, wav_tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        if not self.has_e1:
-            return wav_tensor.clone(), torch.zeros_like(wav_tensor)
-        mix_np = self._to_fixed_np(wav_tensor)
-        infer_fn, core, _ = load_mossformer_model(self.e1_path, num_spks=2, device=self.device, scale_equivariant=False)
-        try:
-            est2 = infer_fn(mix_np)  # [2, T]: 0=speech, 1=env
-            sp_t = torch.from_numpy(est2[0]).unsqueeze(0).to(self.device)
-            ev_t = torch.from_numpy(est2[1]).unsqueeze(0).to(self.device)
-            return sp_t, ev_t
-        finally:
-            del infer_fn, core
-            clear_device_cache(self.device)
+    @staticmethod
+    def _is_oom_error(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return (
+            "out of memory" in msg
+            or "mps backend out of memory" in msg
+            or isinstance(exc, getattr(torch.cuda, "OutOfMemoryError", ()))
+        )
 
-    # -------------------------------------------------------------------------
-    # Step 2: Session A+ Speech Counter (Single-Load Batched [raw, e1])
-    # -------------------------------------------------------------------------
-    def _run_aplus_backbone_batch(self, wavs_np: List[np.ndarray], model_name: str) -> List[float]:
-        """Loads ONE Session A+ checkpoint strict=True, evaluates ALL wavs_np in one pass, and unloads immediately."""
+    def _get_or_load_mossformer(
+        self,
+        cache_key: str,
+        ckpt_path: str,
+        num_spks: int,
+        scale_equivariant: bool = False,
+    ) -> Tuple[Any, Any, bool]:
+        entry = self._gpu_cache.get(cache_key)
+        if entry is not None:
+            return entry[0], entry[1], True
+        infer_fn, core, _ = load_mossformer_model(
+            ckpt_path, num_spks, self.device, scale_equivariant=scale_equivariant
+        )
+        if self._gpu_cache.enabled:
+            sz = os.path.getsize(ckpt_path) if os.path.isfile(ckpt_path) else 220_000_000
+            self._gpu_cache.put(cache_key, (infer_fn, core), sz)
+            return infer_fn, core, (self._gpu_cache.get(cache_key) is not None)
+        return infer_fn, core, False
+
+    def _get_or_load_aplus_backbone(self, model_name: str) -> Tuple[Any, np.ndarray, np.ndarray, str, bool]:
+        cache_key = f"aplus:{model_name}"
+        entry = self._gpu_cache.get(cache_key)
+        if entry is not None:
+            model, dsp_mean, dsp_std, mode = entry
+            return model, dsp_mean, dsp_std, mode, True
+
         if model_name == "melati_eat_large":
             ckpt_path = os.path.join(self.a_plus_dir, "sessionAplus_melati_eat_large.pt")
             mode = "fbank128"
@@ -2107,10 +2245,44 @@ class SANADASOTAPipeline:
 
         dsp_mean = np.asarray(ck["dsp_mean"], dtype=np.float32)
         dsp_std = np.maximum(np.asarray(ck["dsp_std"], dtype=np.float32), 1e-4)
+        del ck
+        model.to(self.device).eval()
+
+        if self._gpu_cache.enabled:
+            sz = os.path.getsize(ckpt_path) if os.path.isfile(ckpt_path) else 400_000_000
+            self._gpu_cache.put(cache_key, (model, dsp_mean, dsp_std, mode), sz)
+            return model, dsp_mean, dsp_std, mode, (self._gpu_cache.get(cache_key) is not None)
+        return model, dsp_mean, dsp_std, mode, False
+
+    # -------------------------------------------------------------------------
+    # Step 1: Session E1 Gatekeeper
+    # -------------------------------------------------------------------------
+    def separate_speech_vs_env(self, wav_tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if not self.has_e1:
+            return wav_tensor.clone(), torch.zeros_like(wav_tensor)
+        mix_np = self._to_fixed_np(wav_tensor)
+        infer_fn, core, is_cached = self._get_or_load_mossformer(
+            "e1", self.e1_path, num_spks=2, scale_equivariant=False
+        )
+        try:
+            est2 = infer_fn(mix_np)  # [2, T]: 0=speech, 1=env
+            sp_t = torch.from_numpy(est2[0]).unsqueeze(0).to(self.device)
+            ev_t = torch.from_numpy(est2[1]).unsqueeze(0).to(self.device)
+            return sp_t, ev_t
+        finally:
+            if not is_cached:
+                del infer_fn, core
+                clear_device_cache(self.device)
+
+    # -------------------------------------------------------------------------
+    # Step 2: Session A+ Speech Counter (Single-Load Batched [raw, e1])
+    # -------------------------------------------------------------------------
+    def _run_aplus_backbone_batch(self, wavs_np: List[np.ndarray], model_name: str) -> List[float]:
+        """Loads ONE Session A+ checkpoint strict=True, evaluates ALL wavs_np in one pass, and unloads immediately (unless demo GPU cache is enabled)."""
+        model, dsp_mean, dsp_std, mode, is_cached = self._get_or_load_aplus_backbone(model_name)
         dsp_raw = np.stack([extract_dsp_24_aplus(w) for w in wavs_np], axis=0)
         dsp_norm = np.clip((dsp_raw - dsp_mean[None, :]) / dsp_std[None, :], -6.0, 6.0).astype(np.float32)
 
-        model.to(self.device).eval()
         try:
             with torch.no_grad():
                 sub_d = torch.from_numpy(dsp_norm).to(self.device)
@@ -2131,8 +2303,9 @@ class SANADASOTAPipeline:
                 blends = np.clip(0.35 * np.sum(cp * k_grid, axis=1) + 0.35 * np.sum(op, axis=1) + 0.30 * rp, 0.0, 9.0)
                 return [float(x) for x in blends]
         finally:
-            del model, ck
-            clear_device_cache(self.device)
+            if not is_cached:
+                del model
+                clear_device_cache(self.device)
 
     def predict_source_count(
         self,
@@ -2172,11 +2345,21 @@ class SANADASOTAPipeline:
             active_models = [(mk, w / tot_w) for mk, w in cand]
 
         # Single load per model for BOTH [raw_np, sp_np] (cuts latency in half!)
-        k_raw, k_e1 = 0.0, 0.0
+        k_raw, k_e1, used_weight, any_failed = 0.0, 0.0, 0.0, False
         for mk, weight in active_models:
-            kr, ke = self._run_aplus_backbone_batch([raw_np, sp_np], mk)
-            k_raw += weight * kr
-            k_e1 += weight * ke
+            try:
+                kr, ke = self._run_aplus_backbone_batch([raw_np, sp_np], mk)
+                k_raw += weight * kr
+                k_e1 += weight * ke
+                used_weight += weight
+            except Exception as exc:
+                any_failed = True
+                logger.warning(f"[Session A+] Backbone {mk} failed ({exc}); skipping in ensemble.")
+        if used_weight <= 0.0:
+            raise RuntimeError("All Session A+ backbones failed during source counting inference.")
+        if any_failed:
+            k_raw /= used_weight
+            k_e1 /= used_weight
 
         k_cont = _apply_triple_physics_gate(
             k_raw=k_raw, k_e1=k_e1, speech_rms=speech_rms, env_rms=env_rms,
@@ -2207,7 +2390,13 @@ class SANADASOTAPipeline:
     # -------------------------------------------------------------------------
     # Step 3: Session B v4 32-Class Environmental Tagger (Dual-Mode Blind Routing)
     # -------------------------------------------------------------------------
-    def _run_sessionb_backbone(self, wav_np: np.ndarray, model_name: str) -> np.ndarray:
+    def _get_or_load_sessionb_backbone(self, model_name: str) -> Tuple[Any, np.ndarray, np.ndarray, str, Any, bool]:
+        cache_key = f"sessionb:{model_name}"
+        entry = self._gpu_cache.get(cache_key)
+        if entry is not None:
+            model, dsp_mean, dsp_std, mode, ced_ext = entry
+            return model, dsp_mean, dsp_std, mode, ced_ext, True
+
         ced_ext = None
         if model_name == "melati_eat_large":
             ckpt_path = os.path.join(self.b_dir, "sessionB_melati_eat_large_fsd32.pt")
@@ -2236,10 +2425,20 @@ class SANADASOTAPipeline:
 
         dsp_mean = np.asarray(ck["dsp_mean"], dtype=np.float32)
         dsp_std = np.maximum(np.asarray(ck["dsp_std"], dtype=np.float32), 1e-4)
+        del ck
+        model.to(self.device).eval()
+
+        if self._gpu_cache.enabled:
+            sz = os.path.getsize(ckpt_path) if os.path.isfile(ckpt_path) else 400_000_000
+            self._gpu_cache.put(cache_key, (model, dsp_mean, dsp_std, mode, ced_ext), sz)
+            return model, dsp_mean, dsp_std, mode, ced_ext, (self._gpu_cache.get(cache_key) is not None)
+        return model, dsp_mean, dsp_std, mode, ced_ext, False
+
+    def _run_sessionb_backbone(self, wav_np: np.ndarray, model_name: str) -> np.ndarray:
+        model, dsp_mean, dsp_std, mode, ced_ext, is_cached = self._get_or_load_sessionb_backbone(model_name)
         dsp_raw = extract_dsp_24_b(wav_np)
         dsp_norm = np.clip((dsp_raw - dsp_mean) / dsp_std, -6.0, 6.0).astype(np.float32)
 
-        model.to(self.device).eval()
         try:
             with torch.no_grad():
                 sub_d = torch.from_numpy(dsp_norm).unsqueeze(0).to(self.device)
@@ -2251,8 +2450,9 @@ class SANADASOTAPipeline:
                     out = model(bx, sub_d)
                 return torch.sigmoid(out["tag_logits"].float()).squeeze(0).cpu().numpy().astype(np.float32)
         finally:
-            del model, ck, ced_ext
-            clear_device_cache(self.device)
+            if not is_cached:
+                del model, ced_ext
+                clear_device_cache(self.device)
 
     def predict_env_tagging(
         self,
@@ -2301,8 +2501,18 @@ class SANADASOTAPipeline:
             active_models = [(mk, w / tot_w) for mk, w in cand]
 
         class_probs = np.zeros(len(self.class_names), dtype=np.float32)
+        used_weight, any_failed = 0.0, False
         for mk, weight in active_models:
-            class_probs += weight * self._run_sessionb_backbone(wav_np, mk)
+            try:
+                class_probs += weight * self._run_sessionb_backbone(wav_np, mk)
+                used_weight += weight
+            except Exception as exc:
+                any_failed = True
+                logger.warning(f"[Session B] Backbone {mk} failed ({exc}); skipping in ensemble.")
+        if used_weight <= 0.0:
+            raise RuntimeError("All Session B backbones failed during environmental tagging inference.")
+        if any_failed:
+            class_probs /= used_weight
 
         thr_vec = self.clean_k0_thresholds if is_clean_k0 else self.per_class_thresholds
         for idx, cls_name in enumerate(self.class_names):
@@ -2424,56 +2634,84 @@ class SANADASOTAPipeline:
             si_sdr_base = 16.0
 
         elif k == 2:
-            fn, core, _ = load_mossformer_model(os.path.join(self.c1_dir, "mossformer2_2spk_spkid_16k.pt"), 2, self.device)
+            fn, core, is_cached = self._get_or_load_mossformer(
+                "c1_2spk", os.path.join(self.c1_dir, "mossformer2_2spk_spkid_16k.pt"), 2
+            )
             try:
                 est = fn(sp_np)
                 stems_np = [est[i] for i in range(2)]
                 model_name, si_sdr_base = "SANADA-SOTA-MossFormer2-2Spk", 18.5
             finally:
-                del fn, core
-                clear_device_cache(self.device)
+                if not is_cached:
+                    del fn, core
+                    clear_device_cache(self.device)
 
         elif k == 3:
-            fn, core, _ = load_mossformer_model(os.path.join(self.c1_dir, "mossformer2_3spk_spkid_16k.pt"), 3, self.device)
+            fn, core, is_cached = self._get_or_load_mossformer(
+                "c1_3spk", os.path.join(self.c1_dir, "mossformer2_3spk_spkid_16k.pt"), 3
+            )
             try:
                 est = fn(sp_np)
                 stems_np = [est[i] for i in range(3)]
                 model_name, si_sdr_base = "SANADA-SOTA-MossFormer2-3Spk", 12.1
             finally:
-                del fn, core
-                clear_device_cache(self.device)
+                if not is_cached:
+                    del fn, core
+                    clear_device_cache(self.device)
 
         elif k == 4:
-            fn, core, _ = load_mossformer_model(os.path.join(self.c2_dir, "mossformer2_4spk_spkid_16k.pt"), 4, self.device)
+            fn, core, is_cached = self._get_or_load_mossformer(
+                "c2_4spk", os.path.join(self.c2_dir, "mossformer2_4spk_spkid_16k.pt"), 4
+            )
             try:
                 est = fn(sp_np)
                 if self.c2_use_mixproj:
                     est = apply_scale_optimal_mixproj(est, sp_np)
+                else:
+                    est = _restore_per_stem_scale(est, sp_np)
                 stems_np = [est[i] for i in range(4)]
+                stems_np.sort(key=lambda a: float(np.mean(a ** 2)), reverse=True)
                 model_name, si_sdr_base = "SANADA-SOTA-MossFormer2-4Spk", 11.4
             finally:
-                del fn, core
-                clear_device_cache(self.device)
+                if not is_cached:
+                    del fn, core
+                    clear_device_cache(self.device)
 
         else:
-            d_fn, d_core, _ = load_mossformer_model(
-                os.path.join(self.d_dir, "mossformer2_orpit_5to9spk_16k.pt"), 2, self.device, scale_equivariant=True,
+            d_fn, d_core, d_cached = self._get_or_load_mossformer(
+                "d_orpit", os.path.join(self.d_dir, "mossformer2_orpit_5to9spk_16k.pt"), 2, scale_equivariant=True
             )
-            c1_k3_fn, c1_k3_core = None, None
+            c1_k3_fn, c1_k3_core, c1_k3_cached = None, None, False
             if self.d_use_hybrid_c1 and self.has_c1_3spk:
-                c1_k3_fn, c1_k3_core, _ = load_mossformer_model(os.path.join(self.c1_dir, "mossformer2_3spk_spkid_16k.pt"), 3, self.device)
+                c1_k3_fn, c1_k3_core, c1_k3_cached = self._get_or_load_mossformer(
+                    "c1_3spk", os.path.join(self.c1_dir, "mossformer2_3spk_spkid_16k.pt"), 3
+                )
             try:
                 est = separate_orpit_k(d_fn, sp_np, k, mix_proj=True, c1_k3_fn=c1_k3_fn)
                 stems_np = [est[i] for i in range(k)]
                 model_name = f"SANADA-SOTA-MossFormer2-ORPIT-{k}Spk"
                 si_sdr_base = max(2.5, 9.0 - (k - 4) * 1.1)
             finally:
-                del d_fn, d_core, c1_k3_fn, c1_k3_core
-                clear_device_cache(self.device)
+                if not d_cached:
+                    del d_fn, d_core
+                if not c1_k3_cached:
+                    del c1_k3_fn, c1_k3_core
+                if (not d_cached) or (self.d_use_hybrid_c1 and self.has_c1_3spk and not c1_k3_cached):
+                    clear_device_cache(self.device)
+
+        guarded_stems = []
+        for s_np in stems_np:
+            s_cur = s_np.astype(np.float32)
+            pk = float(np.max(np.abs(s_cur))) if len(s_cur) > 0 else 0.0
+            pg = False
+            if pk > 0.95:
+                s_cur = (s_cur * (0.95 / pk)).astype(np.float32)
+                pg = True
+            guarded_stems.append((s_cur, pg))
 
         stems_records: List[Dict[str, Any]] = []
-        total_energy = sum(float(np.sum(s ** 2)) for s in stems_np) + 1e-12
-        for ch, s_np in enumerate(stems_np, start=1):
+        total_energy = sum(float(np.sum(s ** 2)) for s, _ in guarded_stems) + 1e-12
+        for ch, (s_np, peak_guarded) in enumerate(guarded_stems, start=1):
             fname = f"{session_id}_stem_{ch}.wav"
             out_path = os.path.join(output_dir, fname)
             sf.write(out_path, s_np.astype(np.float32), TARGET_SAMPLE_RATE, subtype="PCM_16")
@@ -2487,7 +2725,7 @@ class SANADASOTAPipeline:
                 "rms_energy": rms, "rms_dbfs": round(float(20.0 * np.log10(max(rms, 1e-12))), 2),
                 "energy_share_pct": round((energy / total_energy) * 100.0, 2),
                 "relative_energy_db": 0.0, "is_bleed_candidate": False,
-                "scale_restoration_alpha": 1.0, "peak_guarded": False,
+                "scale_restoration_alpha": 1.0, "peak_guarded": peak_guarded,
             })
 
         return {
@@ -2495,6 +2733,86 @@ class SANADASOTAPipeline:
             "all_4_raw_stems": self._pad_to_4_stems(stems_records, output_dir, session_id, len(sp_np)) if all_4_stems else None,
             "complexity_ceiling_exceeded": bool(k > 4), "model": model_name,
         }
+
+    def _get_or_load_e2_model(self) -> Tuple[Any, bool]:
+        cache_key = "e2_clapsep"
+        entry = self._gpu_cache.get(cache_key)
+        if entry is not None:
+            return entry, True
+
+        cfg_p = os.path.join(self.e2_dir, "sessionE2_clapsep_config.json")
+        if os.path.isfile(cfg_p):
+            with open(cfg_p) as f:
+                e2_cfg = json.load(f)
+        else:
+            e2_cfg = {}
+        e2_ckpt_path = os.path.join(self.e2_dir, "clapsep_lora_32class_env_16k.pt")
+        e2_ck = torch.load(e2_ckpt_path, map_location="cpu", weights_only=False)
+        e2_model = CLAPSepLoRASeparator(
+            num_classes=len(self.class_names),
+            class_text_embs=torch.zeros(len(self.class_names), 512),
+            mel_top_db=e2_cfg.get("mel_top_db", None),
+            lora_r=int(e2_cfg.get("lora_r", 16)),
+            lora_alpha=float(e2_cfg.get("lora_alpha", 32.0)),
+            cache_dir=HF_CACHE_DIR,
+        ).to(self.device)
+        e2_model.load_trainable_state_dict(e2_ck["trainable_state_dict"], auto_frozen=e2_ck.get("auto_frozen"))
+        print("[STRICT LOAD OK] clapsep_lora_32class_env_16k.pt (buffers=4/4, missing=0, unexpected=0)")
+        del e2_ck
+        e2_model.eval()
+
+        if self._gpu_cache.enabled:
+            base_sz = os.path.getsize(e2_ckpt_path) if os.path.isfile(e2_ckpt_path) else 75_000_000
+            self._gpu_cache.put(cache_key, e2_model, base_sz + 600_000_000)
+            return e2_model, (self._gpu_cache.get(cache_key) is not None)
+        return e2_model, False
+
+    def prewarm_demo_models(self) -> Dict[str, Any]:
+        """Pre-loads core SOTA Wave 1-4 models into _gpu_cache (respecting max_bytes LRU limit)."""
+        if not self._gpu_cache.enabled:
+            return self._gpu_cache.stats()
+        if self.has_e1:
+            try:
+                self._get_or_load_mossformer("e1", self.e1_path, num_spks=2, scale_equivariant=False)
+            except Exception as e:
+                logger.warning(f"[Prewarm] e1 skipped: {e}")
+        for mk, fn in [
+            ("melati_eat_large", "sessionAplus_melati_eat_large.pt"),
+            ("sslam_as2m", "sessionAplus_sslam_as2m.pt"),
+        ]:
+            if os.path.isfile(os.path.join(self.a_plus_dir, fn)):
+                try:
+                    self._get_or_load_aplus_backbone(mk)
+                except Exception as e:
+                    logger.warning(f"[Prewarm] aplus:{mk} skipped: {e}")
+        for mk, fn in [
+            ("melati_eat_large", "sessionB_melati_eat_large_fsd32.pt"),
+            ("sslam_as2m", "sessionB_sslam_as2m_fsd32.pt"),
+            ("ced_base", "sessionB_ced_base_fsd32.pt"),
+        ]:
+            if os.path.isfile(os.path.join(self.b_dir, fn)):
+                try:
+                    self._get_or_load_sessionb_backbone(mk)
+                except Exception as e:
+                    logger.warning(f"[Prewarm] sessionb:{mk} skipped: {e}")
+        if self.has_c1_2spk:
+            try:
+                self._get_or_load_mossformer("c1_2spk", os.path.join(self.c1_dir, "mossformer2_2spk_spkid_16k.pt"), 2)
+            except Exception as e:
+                logger.warning(f"[Prewarm] c1_2spk skipped: {e}")
+        if self.has_c2:
+            try:
+                self._get_or_load_mossformer("c2_4spk", os.path.join(self.c2_dir, "mossformer2_4spk_spkid_16k.pt"), 4)
+            except Exception as e:
+                logger.warning(f"[Prewarm] c2_4spk skipped: {e}")
+        if self.has_e2:
+            try:
+                self._get_or_load_e2_model()
+            except Exception as e:
+                logger.warning(f"[Prewarm] e2_clapsep skipped: {e}")
+        stats = self._gpu_cache.stats()
+        logger.info(f"[Prewarm] Demo GPU cache ready: {stats}")
+        return stats
 
     # -------------------------------------------------------------------------
     # Step 5: Plug-and-Play Session E2 v5 (CLAPSep-LoRA 32-Class Env Separation)
@@ -2533,53 +2851,125 @@ class SANADASOTAPipeline:
                 }],
             }
 
-        cfg_p = os.path.join(self.e2_dir, "sessionE2_clapsep_config.json")
-        e2_cfg = json.load(open(cfg_p)) if os.path.isfile(cfg_p) else {}
-        e2_ck = torch.load(os.path.join(self.e2_dir, "clapsep_lora_32class_env_16k.pt"), map_location="cpu", weights_only=False)
-        e2_model = CLAPSepLoRASeparator(
-            num_classes=len(self.class_names),
-            class_text_embs=torch.zeros(len(self.class_names), 512),
-            mel_top_db=e2_cfg.get("mel_top_db", None),
-            lora_r=int(e2_cfg.get("lora_r", 16)),
-            lora_alpha=float(e2_cfg.get("lora_alpha", 32.0)),
-            cache_dir=HF_CACHE_DIR,
-        ).to(self.device)
-        e2_model.load_trainable_state_dict(e2_ck["trainable_state_dict"], auto_frozen=e2_ck.get("auto_frozen"))
-        print("[STRICT LOAD OK] clapsep_lora_32class_env_16k.pt (buffers=4/4, missing=0, unexpected=0)")
-        e2_model.eval()
+        e2_model, is_cached = self._get_or_load_e2_model()
         try:
             est_e, kept_idx, rel_dbs = separate_e2_active_classes(
                 e2_model, env_np, active_class_ids, self.device,
                 use_neg=True, allow_clean_m2_mixproj=is_clean_k0, fp_gate_db=-15.0,
             )
             env_stems = []
-            tot_e = sum(float(np.sum(est_e[i] ** 2)) for i in kept_idx) + 1e-12
-            for rank_i, pos_i in enumerate(kept_idx, start=1):
+            processed_env = []
+            for pos_i in kept_idx:
+                s_env = np.nan_to_num(est_e[pos_i].astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+                rms = float(np.sqrt(np.mean(s_env ** 2)))
+                alpha = 1.0
+                if 1e-4 <= rms < 0.03:
+                    alpha = min(0.08 / rms, 4.0)
+                    s_env = (s_env * alpha).astype(np.float32)
+                    rms = float(np.sqrt(np.mean(s_env ** 2)))
+                peak = float(np.max(np.abs(s_env))) if len(s_env) > 0 else 0.0
+                peak_guarded = False
+                if peak > 0.95:
+                    s_env = (s_env * (0.95 / peak)).astype(np.float32)
+                    rms = float(np.sqrt(np.mean(s_env ** 2)))
+                    peak_guarded = True
+                processed_env.append((pos_i, s_env, rms, alpha, peak_guarded))
+
+            tot_e = sum(float(np.sum(item[1] ** 2)) for item in processed_env) + 1e-12
+            for rank_i, (pos_i, s_env, rms, alpha, peak_guarded) in enumerate(processed_env, start=1):
                 cid = active_class_ids[pos_i]
                 lbl = self.class_names[cid].replace("FSD_", "").replace("_", " ")
                 safe_lbl = re.sub(r"[^a-zA-Z0-9]+", "_", lbl).strip("_")
                 fname = f"{session_id}_env_{rank_i}_{safe_lbl}.wav"
                 out_path = os.path.join(output_dir, fname)
-                sf.write(out_path, est_e[pos_i].astype(np.float32), TARGET_SAMPLE_RATE, subtype="PCM_16")
-                rms = float(np.sqrt(np.mean(est_e[pos_i] ** 2)))
+                sf.write(out_path, s_env.astype(np.float32), TARGET_SAMPLE_RATE, subtype="PCM_16")
                 env_stems.append({
                     "channel": rank_i, "rank": rank_i, "filename": fname, "filepath": out_path,
                     "url": f"/static/stems/{fname}", "assigned_tag": lbl,
                     "stem_confidence": 0.92, "si_sdr_estimate_db": 6.0,
                     "rms_energy": rms, "rms_dbfs": round(float(20.0 * np.log10(max(rms, 1e-12))), 2),
-                    "energy_share_pct": round((float(np.sum(est_e[pos_i] ** 2)) / tot_e) * 100.0, 2),
+                    "energy_share_pct": round((float(np.sum(s_env ** 2)) / tot_e) * 100.0, 2),
                     "relative_energy_db": round(float(rel_dbs[pos_i]), 2),
-                    "is_bleed_candidate": False, "scale_restoration_alpha": 1.0, "peak_guarded": False,
+                    "is_bleed_candidate": False,
+                    "scale_restoration_alpha": round(float(alpha), 4),
+                    "peak_guarded": peak_guarded,
+                })
+            if len(env_stems) == 0 and is_clean_k0:
+                s_fb = env_np.astype(np.float32)
+                pk_fb = float(np.max(np.abs(s_fb))) if len(s_fb) > 0 else 0.0
+                fb_guarded = False
+                if pk_fb > 0.95:
+                    s_fb = (s_fb * (0.95 / pk_fb)).astype(np.float32)
+                    fb_guarded = True
+                rms_fb = float(np.sqrt(np.mean(s_fb ** 2)))
+                fname = f"{session_id}_env_stem.wav"
+                out_path = os.path.join(output_dir, fname)
+                sf.write(out_path, s_fb, TARGET_SAMPLE_RATE, subtype="PCM_16")
+                tag_label = ", ".join(detected_tags[:3]) if detected_tags else "Environmental Background"
+                env_stems.append({
+                    "channel": 1, "rank": 1, "filename": fname, "filepath": out_path,
+                    "url": f"/static/stems/{fname}", "assigned_tag": tag_label,
+                    "stem_confidence": 0.90, "si_sdr_estimate_db": 12.0,
+                    "rms_energy": rms_fb, "rms_dbfs": round(float(20.0 * np.log10(max(rms_fb, 1e-12))), 2),
+                    "energy_share_pct": 100.0, "relative_energy_db": 0.0,
+                    "is_bleed_candidate": False, "scale_restoration_alpha": 1.0, "peak_guarded": fb_guarded,
                 })
             return {"e2_active": True, "env_stems": env_stems}
         finally:
-            del e2_model, e2_ck
-            clear_device_cache(self.device)
+            if not is_cached:
+                del e2_model
+                clear_device_cache(self.device)
 
     # -------------------------------------------------------------------------
     # Full End-to-End Orchestration
     # -------------------------------------------------------------------------
     def analyze_and_separate(
+        self,
+        audio_input: Union[np.ndarray, bytes, str],
+        orig_sr: int = TARGET_SAMPLE_RATE,
+        mode: str = "auto",
+        output_dir: str = STATIC_STEMS_DIR,
+        tag_threshold: Optional[float] = None,
+        file_prefix: str = "",
+        all_4_stems: bool = False,
+        task: str = "all",
+    ) -> Dict[str, Any]:
+        with self._infer_lock:
+            try:
+                return self._analyze_and_separate_impl(
+                    audio_input=audio_input,
+                    orig_sr=orig_sr,
+                    mode=mode,
+                    output_dir=output_dir,
+                    tag_threshold=tag_threshold,
+                    file_prefix=file_prefix,
+                    all_4_stems=all_4_stems,
+                    task=task,
+                )
+            except Exception as exc:
+                if self._gpu_cache.enabled and self._is_oom_error(exc):
+                    logger.warning(
+                        f"GPU OOM encountered with demo cache enabled ({exc}); flushing LRU cache and retrying uncached..."
+                    )
+                    prev_enabled = self._gpu_cache.enabled
+                    self._gpu_cache.clear()
+                    self._gpu_cache.enabled = False
+                    try:
+                        return self._analyze_and_separate_impl(
+                            audio_input=audio_input,
+                            orig_sr=orig_sr,
+                            mode=mode,
+                            output_dir=output_dir,
+                            tag_threshold=tag_threshold,
+                            file_prefix=file_prefix,
+                            all_4_stems=all_4_stems,
+                            task=task,
+                        )
+                    finally:
+                        self._gpu_cache.enabled = prev_enabled
+                raise
+
+    def _analyze_and_separate_impl(
         self,
         audio_input: Union[np.ndarray, bytes, str],
         orig_sr: int = TARGET_SAMPLE_RATE,

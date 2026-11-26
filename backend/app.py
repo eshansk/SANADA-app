@@ -243,6 +243,8 @@ def get_health_status():
         "device": device_str,
         "cuda_available": telemetry["cuda_available"],
         "mps_available": telemetry["mps_available"],
+        "rocm_available": telemetry.get("rocm_available", False),
+        "xpu_available": telemetry.get("xpu_available", False),
         "gpu_name": telemetry["gpu_name"],
         "total_vram_gb": telemetry["total_vram_gb"],
         "low_vram_mode": telemetry["low_vram_mode"],

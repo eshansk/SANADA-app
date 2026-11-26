@@ -74,12 +74,14 @@ class SANADAInferenceEngine:
                 device=self.device
             )
             if not self.sota_pipeline.is_ready():
-                print("SOTA Pipeline checkpoints incomplete; will use Path B fallback.")
+                print(f"SOTA Pipeline checkpoints incomplete: {self.sota_pipeline.get_readiness_dict()}; will use Path B fallback.")
                 self.sota_pipeline = None
             else:
                 print("SANADA SOTA Wave 1-3 Pipeline initialized as primary tier.")
         except Exception as e:
+            import traceback
             print(f"Notice initializing SOTA Pipeline: {e}")
+            traceback.print_exc()
             self.sota_pipeline = None
 
         # Initialize Production SANADAPipeline (Fallback tier - only if SOTA is not ready)
