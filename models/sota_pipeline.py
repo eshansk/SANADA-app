@@ -33,6 +33,7 @@ from typing import Optional, Dict, Any, Tuple, List, Union
 import numpy as np
 import soundfile as sf
 from scipy import signal as scipy_signal
+from scipy.optimize import linear_sum_assignment
 
 import torch
 import torch.nn as nn
@@ -2434,7 +2435,7 @@ class SANADASOTAPipeline:
             return model, dsp_mean, dsp_std, mode, ced_ext, (self._gpu_cache.get(cache_key) is not None)
         return model, dsp_mean, dsp_std, mode, ced_ext, False
 
-    def _run_sessionb_backbone(self, wav_np: np.ndarray, model_name: str) -> np.ndarray:
+    def _run_sessionb_backbone(self, wav_np: np.ndarray, model_name: str) -> Tuple[np.ndarray, float]:
         model, dsp_mean, dsp_std, mode, ced_ext, is_cached = self._get_or_load_sessionb_backbone(model_name)
         dsp_raw = extract_dsp_24_b(wav_np)
         dsp_norm = np.clip((dsp_raw - dsp_mean) / dsp_std, -6.0, 6.0).astype(np.float32)
@@ -2448,7 +2449,17 @@ class SANADASOTAPipeline:
                     bx = extract_ced_input(ced_ext, wav_np, target_frames=None).unsqueeze(0).to(self.device)
                 with _autocast_ctx(self.device):
                     out = model(bx, sub_d)
-                return torch.sigmoid(out["tag_logits"].float()).squeeze(0).cpu().numpy().astype(np.float32)
+                tag_probs = torch.sigmoid(out["tag_logits"].float()).squeeze(0).cpu().numpy().astype(np.float32)
+                c_cls = torch.softmax(out["cnt_cls"].float(), dim=-1).squeeze(0).cpu().numpy()
+                c_ord = torch.sigmoid(out["cnt_ord"].float()).squeeze(0).cpu().numpy()
+                c_reg = float(np.clip(out["cnt_reg"].float().squeeze().cpu().item(), 0.0, 4.0))
+                c_grid = np.arange(len(c_cls), dtype=np.float32)
+                env_cnt_blend = float(np.clip(
+                    0.35 * float(np.sum(c_cls * c_grid)) + 0.35 * float(np.sum(c_ord)) + 0.30 * c_reg,
+                    0.0,
+                    4.0,
+                ))
+                return tag_probs, env_cnt_blend
         finally:
             if not is_cached:
                 del model, ced_ext
@@ -2477,6 +2488,7 @@ class SANADASOTAPipeline:
             return {
                 "active_classes": [], "active_class_ids": [], "detected_tags": [],
                 "class_probabilities": probs_dict, "num_detected": 0,
+                "env_count_raw": 0.0, "env_count_pred": 0,
                 "active_events": [], "top_5_events": [],
                 "threshold_applied": threshold_override if threshold_override is not None else self.global_threshold,
                 "taxonomy": "FSD-50K-32-Classes", "model": "SANADA-SOTA-SessionB-v4",
@@ -2501,10 +2513,17 @@ class SANADASOTAPipeline:
             active_models = [(mk, w / tot_w) for mk, w in cand]
 
         class_probs = np.zeros(len(self.class_names), dtype=np.float32)
+        env_cnt_raw = 0.0
         used_weight, any_failed = 0.0, False
         for mk, weight in active_models:
             try:
-                class_probs += weight * self._run_sessionb_backbone(wav_np, mk)
+                out_b = self._run_sessionb_backbone(wav_np, mk)
+                if isinstance(out_b, tuple):
+                    tp_b, ec_b = out_b
+                else:
+                    tp_b, ec_b = out_b, float(np.sum(np.asarray(out_b) >= 0.5))
+                class_probs += weight * tp_b
+                env_cnt_raw += weight * float(ec_b)
                 used_weight += weight
             except Exception as exc:
                 any_failed = True
@@ -2513,6 +2532,7 @@ class SANADASOTAPipeline:
             raise RuntimeError("All Session B backbones failed during environmental tagging inference.")
         if any_failed:
             class_probs /= used_weight
+            env_cnt_raw /= used_weight
 
         thr_vec = self.clean_k0_thresholds if is_clean_k0 else self.per_class_thresholds
         for idx, cls_name in enumerate(self.class_names):
@@ -2538,6 +2558,8 @@ class SANADASOTAPipeline:
             "detected_tags": [ev["label"] for ev in active_events],
             "class_probabilities": probs_dict,
             "num_detected": len(active_events),
+            "env_count_raw": round(float(env_cnt_raw), 4),
+            "env_count_pred": int(len(active_events)) if len(active_events) > 0 else int(np.clip(round(env_cnt_raw), 0, 4)),
             "active_events": active_events,
             "top_5_events": active_events[:5],
             "threshold_applied": threshold_override if threshold_override is not None else self.global_threshold,
@@ -2734,6 +2756,14 @@ class SANADASOTAPipeline:
             "complexity_ceiling_exceeded": bool(k > 4), "model": model_name,
         }
 
+    @staticmethod
+    def _canon_fsd_label(name: str) -> str:
+        s = str(name or "").strip()
+        if s.startswith("FSD_"):
+            s = s[4:]
+        s = s.lower().replace("&", "and")
+        return re.sub(r"[^a-z0-9]+", "", s)
+
     def _get_or_load_e2_model(self) -> Tuple[Any, bool]:
         cache_key = "e2_clapsep"
         entry = self._gpu_cache.get(cache_key)
@@ -2748,9 +2778,38 @@ class SANADASOTAPipeline:
             e2_cfg = {}
         e2_ckpt_path = os.path.join(self.e2_dir, "clapsep_lora_32class_env_16k.pt")
         e2_ck = torch.load(e2_ckpt_path, map_location="cpu", weights_only=False)
+
+        e2_class_names = None
+        if isinstance(e2_ck, dict) and isinstance(e2_ck.get("class_names"), (list, tuple)) and len(e2_ck["class_names"]) > 0:
+            e2_class_names = list(e2_ck["class_names"])
+        elif isinstance(e2_cfg, dict) and isinstance(e2_cfg.get("class_names"), (list, tuple)) and len(e2_cfg["class_names"]) > 0:
+            e2_class_names = list(e2_cfg["class_names"])
+        else:
+            prompts_p = os.path.join(self.e2_dir, "sessionE2_class_prompts.json")
+            if os.path.isfile(prompts_p):
+                with open(prompts_p) as f:
+                    prompts_data = json.load(f)
+                if isinstance(prompts_data, dict):
+                    for key in ("class_keys", "class_labels", "class_names"):
+                        vals = prompts_data.get(key)
+                        if isinstance(vals, list) and len(vals) == len(self.class_names):
+                            e2_class_names = list(vals)
+                            break
+                    if e2_class_names is None and isinstance(prompts_data.get("templates"), dict) and len(prompts_data["templates"]) == len(self.class_names):
+                        e2_class_names = list(prompts_data["templates"].keys())
+                    if e2_class_names is None and len(prompts_data) == len(self.class_names):
+                        e2_class_names = list(prompts_data.keys())
+                elif isinstance(prompts_data, list) and len(prompts_data) == len(self.class_names):
+                    e2_class_names = [
+                        item["name"] if isinstance(item, dict) and "name" in item else str(item)
+                        for item in prompts_data
+                    ]
+        if e2_class_names is None:
+            e2_class_names = list(self.class_names)
+
         e2_model = CLAPSepLoRASeparator(
-            num_classes=len(self.class_names),
-            class_text_embs=torch.zeros(len(self.class_names), 512),
+            num_classes=len(e2_class_names),
+            class_text_embs=torch.zeros(len(e2_class_names), 512),
             mel_top_db=e2_cfg.get("mel_top_db", None),
             lora_r=int(e2_cfg.get("lora_r", 16)),
             lora_alpha=float(e2_cfg.get("lora_alpha", 32.0)),
@@ -2759,6 +2818,7 @@ class SANADASOTAPipeline:
         e2_model.load_trainable_state_dict(e2_ck["trainable_state_dict"], auto_frozen=e2_ck.get("auto_frozen"))
         print("[STRICT LOAD OK] clapsep_lora_32class_env_16k.pt (buffers=4/4, missing=0, unexpected=0)")
         del e2_ck
+        e2_model._sanada_class_names = list(e2_class_names)
         e2_model.eval()
 
         if self._gpu_cache.enabled:
@@ -2825,10 +2885,12 @@ class SANADASOTAPipeline:
         is_clean_k0: bool = False,
         output_dir: str = STATIC_STEMS_DIR,
         file_prefix: str = "",
+        event_conf_map: Optional[Dict[int, float]] = None,
     ) -> Dict[str, Any]:
         os.makedirs(output_dir, exist_ok=True)
         session_id = file_prefix or f"session_{uuid.uuid4().hex[:8]}"
         env_np = self._to_fixed_np(env_stem)
+        event_conf_map = event_conf_map or {}
 
         if not active_class_ids and not is_clean_k0:
             return {"e2_active": False, "env_stems": []}
@@ -2843,7 +2905,7 @@ class SANADASOTAPipeline:
                 "e2_active": False,
                 "env_stems": [{
                     "channel": 1, "rank": 1, "filename": fname, "filepath": out_path,
-                    "url": f"/static/stems/{fname}", "assigned_tag": tag_label,
+                    "url": f"/static/stems/{fname}", "assigned_tag": tag_label, "label": tag_label,
                     "stem_confidence": 0.90, "si_sdr_estimate_db": 12.0,
                     "rms_energy": rms, "rms_dbfs": round(float(20.0 * np.log10(max(rms, 1e-12))), 2),
                     "energy_share_pct": 100.0, "relative_energy_db": 0.0,
@@ -2853,8 +2915,18 @@ class SANADASOTAPipeline:
 
         e2_model, is_cached = self._get_or_load_e2_model()
         try:
+            e2_class_names = getattr(e2_model, "_sanada_class_names", self.class_names)
+            canon_to_e2_idx = {self._canon_fsd_label(n): i for i, n in enumerate(e2_class_names)}
+            e2_query_ids = [
+                canon_to_e2_idx.get(
+                    self._canon_fsd_label(self.class_names[cid]) if 0 <= cid < len(self.class_names) else str(cid),
+                    cid,
+                )
+                for cid in active_class_ids
+            ]
+
             est_e, kept_idx, rel_dbs = separate_e2_active_classes(
-                e2_model, env_np, active_class_ids, self.device,
+                e2_model, env_np, e2_query_ids, self.device,
                 use_neg=True, allow_clean_m2_mixproj=is_clean_k0, fp_gate_db=-15.0,
             )
             env_stems = []
@@ -2875,9 +2947,51 @@ class SANADASOTAPipeline:
                     peak_guarded = True
                 processed_env.append((pos_i, s_env, rms, alpha, peak_guarded))
 
+            verified_cids = [active_class_ids[item[0]] for item in processed_env]
+            verified_confs = [
+                round(float(np.clip(event_conf_map.get(cid, 0.92), 0.50, 0.99)), 4)
+                for cid in verified_cids
+            ]
+            if len(processed_env) >= 1 and self.has_b:
+                try:
+                    stem_probs = []
+                    for item in processed_env:
+                        out_b = self._run_sessionb_backbone(item[1], "melati_eat_large")
+                        probs_b = out_b[0] if isinstance(out_b, tuple) else out_b
+                        stem_probs.append(np.asarray(probs_b, dtype=np.float32))
+                    m_kept = len(processed_env)
+                    cand_cids = list(verified_cids)
+                    score_mat = np.zeros((m_kept, m_kept), dtype=np.float32)
+                    for k_i in range(m_kept):
+                        for j_i in range(m_kept):
+                            c_j = cand_cids[j_i]
+                            if 0 <= c_j < len(stem_probs[k_i]):
+                                score_mat[k_i, j_i] = float(stem_probs[k_i][c_j])
+                    row_ind, col_ind = linear_sum_assignment(-score_mat)
+                    opt_score = float(sum(score_mat[r, c] for r, c in zip(row_ind, col_ind)))
+                    diag_score = float(sum(score_mat[k_i, k_i] for k_i in range(m_kept)))
+                    assign_col = list(range(m_kept))
+                    if m_kept > 1 and opt_score > diag_score + 0.10:
+                        for r, c in zip(row_ind, col_ind):
+                            assign_col[int(r)] = int(c)
+                        print(
+                            f"[Session E2 Tag-Verify] Re-aligned stem tags via acoustic verification "
+                            f"(diag={diag_score:.3f} -> opt={opt_score:.3f})"
+                        )
+                    for k_i in range(m_kept):
+                        vcid = cand_cids[assign_col[k_i]]
+                        verified_cids[k_i] = vcid
+                        p_stem = float(stem_probs[k_i][vcid]) if 0 <= vcid < len(stem_probs[k_i]) else 0.0
+                        p_mix = float(event_conf_map.get(vcid, 0.0))
+                        verified_confs[k_i] = round(float(np.clip(max(p_stem, p_mix), 0.50, 0.99)), 4)
+                except Exception as e:
+                    print(f"[Session E2 Tag-Verify Warning] Falling back to Session B event mapping: {e}")
+
             tot_e = sum(float(np.sum(item[1] ** 2)) for item in processed_env) + 1e-12
             for rank_i, (pos_i, s_env, rms, alpha, peak_guarded) in enumerate(processed_env, start=1):
-                cid = active_class_ids[pos_i]
+                k_idx = rank_i - 1
+                cid = verified_cids[k_idx]
+                stem_conf = verified_confs[k_idx]
                 lbl = self.class_names[cid].replace("FSD_", "").replace("_", " ")
                 safe_lbl = re.sub(r"[^a-zA-Z0-9]+", "_", lbl).strip("_")
                 fname = f"{session_id}_env_{rank_i}_{safe_lbl}.wav"
@@ -2885,8 +2999,8 @@ class SANADASOTAPipeline:
                 sf.write(out_path, s_env.astype(np.float32), TARGET_SAMPLE_RATE, subtype="PCM_16")
                 env_stems.append({
                     "channel": rank_i, "rank": rank_i, "filename": fname, "filepath": out_path,
-                    "url": f"/static/stems/{fname}", "assigned_tag": lbl,
-                    "stem_confidence": 0.92, "si_sdr_estimate_db": 6.0,
+                    "url": f"/static/stems/{fname}", "assigned_tag": lbl, "label": lbl,
+                    "stem_confidence": stem_conf, "si_sdr_estimate_db": 6.0,
                     "rms_energy": rms, "rms_dbfs": round(float(20.0 * np.log10(max(rms, 1e-12))), 2),
                     "energy_share_pct": round((float(np.sum(s_env ** 2)) / tot_e) * 100.0, 2),
                     "relative_energy_db": round(float(rel_dbs[pos_i]), 2),
@@ -2908,7 +3022,7 @@ class SANADASOTAPipeline:
                 tag_label = ", ".join(detected_tags[:3]) if detected_tags else "Environmental Background"
                 env_stems.append({
                     "channel": 1, "rank": 1, "filename": fname, "filepath": out_path,
-                    "url": f"/static/stems/{fname}", "assigned_tag": tag_label,
+                    "url": f"/static/stems/{fname}", "assigned_tag": tag_label, "label": tag_label,
                     "stem_confidence": 0.90, "si_sdr_estimate_db": 12.0,
                     "rms_energy": rms_fb, "rms_dbfs": round(float(20.0 * np.log10(max(rms_fb, 1e-12))), 2),
                     "energy_share_pct": 100.0, "relative_energy_db": 0.0,
@@ -3016,6 +3130,11 @@ class SANADASOTAPipeline:
         sp_sep_in = raw_tensor if use_clean_bypass else speech_stem
 
         if task in ["all", "separating", "separation"]:
+            event_conf_map = {
+                int(ev["class_id"]): float(ev["confidence"])
+                for ev in tag_res.get("active_events", [])
+                if "class_id" in ev
+            }
             env_sep_res = self.predict_env_separation(
                 env_stem=b_input,
                 detected_tags=tag_res["active_classes"],
@@ -3023,6 +3142,7 @@ class SANADASOTAPipeline:
                 is_clean_k0=is_clean_k0,
                 output_dir=output_dir,
                 file_prefix=session_prefix,
+                event_conf_map=event_conf_map,
             )
             sep_res = self.predict_separation(
                 speech_stem=sp_sep_in,
@@ -3034,10 +3154,10 @@ class SANADASOTAPipeline:
                 detected_tags=tag_res["active_classes"],
             )
             # If K==0 and Session E2 produced individual separated env stems, expose them in separated_stems!
-            if pred_k == 0 and env_sep_res["e2_active"] and env_sep_res["env_stems"]:
+            if pred_k == 0 and env_sep_res.get("env_stems"):
                 sep_res["stems"] = env_sep_res["env_stems"]
                 sep_res["reconstructed_count"] = len(env_sep_res["env_stems"])
-                sep_res["model"] = "SANADA-SOTA-SessionE2-CLAPSepLoRA"
+                sep_res["model"] = "SANADA-SOTA-SessionE2-CLAPSepLoRA" if env_sep_res.get("e2_active") else sep_res.get("model", "Environmental-Fallback")
         else:
             sep_res = {
                 "reconstructed_count": 0, "k_sep": pred_k, "stems": [],
@@ -3046,13 +3166,26 @@ class SANADASOTAPipeline:
             }
             env_sep_res = {"e2_active": False, "env_stems": []}
 
+        kept_env_cnt = len(env_sep_res.get("env_stems", [])) if env_sep_res.get("e2_active") else len(tag_res.get("active_events", []))
+        env_count = int(kept_env_cnt if kept_env_cnt > 0 else len(tag_res.get("active_events", [])))
+        env_count_raw = float(tag_res.get("env_count_raw", float(env_count)))
+        total_sources = int(pred_k + env_count)
+        count_res["speech_count"] = pred_k
+        count_res["env_count"] = env_count
+        count_res["env_count_raw"] = round(env_count_raw, 4)
+        count_res["total_sources"] = total_sources
+        count_res["domain"] = "speech" if (pred_k >= 1 and env_count == 0) else ("hybrid" if (pred_k >= 1 and env_count > 0) else "environmental")
+
         human_speech_detected = bool(pred_k >= 1 and not count_res["silent"])
         human_speech_prob = round(min(1.0, 0.55 + 0.05 * pred_k) if human_speech_detected else 0.05, 3)
 
         return {
             "mode_used": mode_used, "duration_sec": duration_sec, "duration_s": duration_sec,
             "sample_rate_hz": TARGET_SAMPLE_RATE, "input_rms": input_rms,
-            "predicted_k": pred_k, "raw_k": count_res["raw_k"], "calibrated_k": count_res["calibrated_k"],
+            "predicted_k": pred_k, "speech_count": pred_k,
+            "env_count": env_count, "env_count_raw": round(env_count_raw, 4),
+            "total_sources": total_sources,
+            "raw_k": count_res["raw_k"], "calibrated_k": count_res["calibrated_k"],
             "confidence": count_res["confidence"],
             "complexity_ceiling_exceeded": count_res["complexity_ceiling_exceeded"],
             "active_events": tag_res["active_events"], "top_5_events": tag_res["top_5_events"],

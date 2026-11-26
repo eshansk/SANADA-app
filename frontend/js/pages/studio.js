@@ -808,11 +808,11 @@ export function initStudioPage() {
         }
     }
 
-    function animateCountUp(el, targetVal, duration = 400, isDominantCrowd = false) {
+    function animateCountUp(el, targetVal, duration = 400, isDominantCrowd = false, isPureEnv = false) {
         const target = parseInt(targetVal, 10);
         if (isNaN(target)) {
             el.textContent = targetVal;
-            updateSegmentedMeter(targetVal, isDominantCrowd, true);
+            updateSegmentedMeter(targetVal, isDominantCrowd, true, isPureEnv);
             return;
         }
         const startTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -822,13 +822,13 @@ export function initStudioPage() {
             const progress = Math.min(1, elapsed / duration);
             const current = Math.floor(progress * target);
             el.textContent = current;
-            updateSegmentedMeter(current, isDominantCrowd, true);
+            updateSegmentedMeter(current, isDominantCrowd, true, isPureEnv);
             if (progress < 1) {
                 if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(step);
                 else setTimeout(() => step(), 16);
             } else {
                 el.textContent = target;
-                updateSegmentedMeter(target, isDominantCrowd, true);
+                updateSegmentedMeter(target, isDominantCrowd, true, isPureEnv);
             }
         }
         if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(step);
@@ -859,25 +859,37 @@ export function initStudioPage() {
         const rawActiveClasses = tagging.active_classes || tagging.active_events || results.active_events || [];
         const activeClasses = rawActiveClasses.map(c => typeof c === 'string' ? c : (c.label || c.event || c.class || String(c)));
 
+        const speechK = count.speech_count !== undefined ? Number(count.speech_count) : Number(dispK || 0);
+        const envCnt = count.env_count !== undefined ? Number(count.env_count) : (results.env_count !== undefined ? Number(results.env_count) : activeClasses.length);
+        const envRaw = count.env_count_raw !== undefined ? Number(count.env_count_raw) : (results.env_count_raw !== undefined ? Number(results.env_count_raw) : (tagging.env_count_raw !== undefined ? Number(tagging.env_count_raw) : envCnt));
+        const isPureEnv = (speechK === 0 && envCnt > 0);
+        const heroK = isPureEnv ? envCnt : speechK;
+
         // Task 1: Source Counting
         if (DOM.kHeroNumber) {
-            animateCountUp(DOM.kHeroNumber, dispK, 400, dominantCrowdMode);
-            updateSegmentedMeter(dispK, dominantCrowdMode, true);
+            DOM.kHeroNumber.dataset.domain = isPureEnv ? 'environmental' : (speechK > 0 && envCnt > 0 ? 'hybrid' : 'speech');
+            animateCountUp(DOM.kHeroNumber, heroK, 400, dominantCrowdMode, isPureEnv);
+            updateSegmentedMeter(heroK, dominantCrowdMode, true, isPureEnv);
             if (DOM.kHeroSub) {
                 const confVal = count.confidence !== undefined ? (count.confidence * 100).toFixed(1) : '94.5';
-                const envCnt = activeClasses.length;
-                if (dispK === 0 && envCnt > 0) {
-                    DOM.kHeroSub.textContent = `0 Speech • ${envCnt} Environmental Sound${envCnt === 1 ? '' : 's'} (${confVal}%)`;
+                if (isPureEnv) {
+                    DOM.kHeroSub.textContent = `${envCnt} Environmental Sound${envCnt === 1 ? '' : 's'} (0 Speech • ${confVal}%)`;
+                } else if (speechK > 0 && envCnt > 0) {
+                    DOM.kHeroSub.textContent = `${speechK} Speech • ${envCnt} Environmental (${confVal}%)`;
                 } else {
                     DOM.kHeroSub.textContent = `Confidence: ${confVal}%`;
                 }
             }
             if (DOM.kModelBadge) {
                 const modeTag = results.mode_used ? ` [${results.mode_used.toUpperCase()}]` : '';
-                DOM.kModelBadge.textContent = `${count.model || 'SANADA-SOTA-SessionAplus'}${modeTag}`;
+                DOM.kModelBadge.textContent = isPureEnv
+                    ? `SANADA-SOTA-SessionB-v4${modeTag}`
+                    : `${count.model || 'SANADA-SOTA-SessionAplus'}${modeTag}`;
             }
             if (DOM.kContinuousVal) {
-                if (count.calibrated_k !== undefined) {
+                if (isPureEnv) {
+                    DOM.kContinuousVal.textContent = `Env: ${envCnt}.00 (Neural: ${envRaw.toFixed(2)})`;
+                } else if (count.calibrated_k !== undefined) {
                     DOM.kContinuousVal.textContent = `Cal: ${count.calibrated_k.toFixed(2)} (Raw: ${count.raw_k.toFixed(2)})`;
                 } else if (count.raw_continuous_prediction !== undefined) {
                     DOM.kContinuousVal.textContent = count.raw_continuous_prediction.toFixed(3);
@@ -974,16 +986,22 @@ export function initStudioPage() {
 
         const speechStems = results.source_separation?.stems || results.speech_separation?.stems || results.separated_stems || [];
         const envStemsRaw = results.env_separation?.env_stems || results.env_stems || [];
-        const seenFiles = new Set(speechStems.map(s => s.filename));
-        const extraEnvStems = (dispK > 0 && results.env_separation?.e2_active)
-            ? envStemsRaw.filter(s => s.filename && !seenFiles.has(s.filename))
-            : [];
-        const rawStems = [...speechStems, ...extraEnvStems];
+        let rawStems;
+        if (speechK === 0 && envStemsRaw.length > 0) {
+            rawStems = envStemsRaw;
+        } else {
+            const seenFiles = new Set(speechStems.map(s => s.filename));
+            const extraEnvStems = (dispK > 0 && results.env_separation?.e2_active)
+                ? envStemsRaw.filter(s => s.filename && !seenFiles.has(s.filename))
+                : [];
+            rawStems = [...speechStems, ...extraEnvStems];
+        }
         if (rawStems.length > 0 && stemMatrix) {
             const resolvedStems = rawStems.map((s, idx) => ({
                 ...s,
                 channel: idx + 1,
                 rank: idx + 1,
+                assigned_tag: s.assigned_tag || s.label || `Source ${idx + 1}`,
                 url: API.getStemUrl(s.url || (s.filename ? `/static/stems/${s.filename}` : '') || s.audio_data_url)
             }));
             stemMatrix.render(resolvedStems, activeBuffer, API_BASE);
@@ -1084,7 +1102,7 @@ export function initStudioPage() {
     }
 
     // 8. 9-Step Segmented Complexity Ceiling Meter Watcher
-    function updateSegmentedMeter(kVal, isDominantCrowd = false, hasInference = false) {
+    function updateSegmentedMeter(kVal, isDominantCrowd = false, hasInference = false, isPureEnv = false) {
         if (!DOM.segmentedMeter || !DOM.gaugeLabel || !DOM.gaugeDot) return;
         if (DOM.segmentedMeter.classList.contains('skeleton-meter')) return;
         const k = parseInt(kVal, 10);
@@ -1111,7 +1129,11 @@ export function initStudioPage() {
             seg.classList.toggle('is-active', shouldBeActive);
         });
 
-        if (k <= 3) {
+        if (isPureEnv && k > 0) {
+            DOM.gaugeDot.className = 'status-dot';
+            DOM.gaugeDot.style.background = '#ffffff';
+            DOM.gaugeLabel.innerHTML = `<strong>N = ${k} Environmental Source${k === 1 ? '' : 's'}</strong>: 0 speech talkers; separated via CLAPSep-LoRA.`;
+        } else if (k <= 3) {
             DOM.gaugeDot.className = 'status-dot';
             DOM.gaugeDot.style.background = '#ffffff';
             DOM.gaugeLabel.innerHTML = `<strong>K = ${k} (Safe Zone)</strong>: Clean separation expected (&gt; 8.0 dB SI-SDR).`;
@@ -1130,7 +1152,8 @@ export function initStudioPage() {
         const observer = new MutationObserver(() => {
             const txt = DOM.kHeroNumber.textContent.trim();
             if (/^\d+$/.test(txt)) {
-                updateSegmentedMeter(txt, parseInt(txt, 10) >= 5, true);
+                const isEnvMode = DOM.kHeroNumber.dataset.domain === 'environmental';
+                updateSegmentedMeter(txt, !isEnvMode && parseInt(txt, 10) >= 5, true, isEnvMode);
             }
         });
         observer.observe(DOM.kHeroNumber, { childList: true, characterData: true, subtree: true });

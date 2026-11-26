@@ -484,6 +484,10 @@ def _process_prediction(
     separated_stems = results.get("separated_stems", results.get("source_separation", {}).get("stems", []))
     all_4_raw_stems = results.get("all_4_raw_stems", results.get("source_separation", {}).get("all_4_raw_stems"))
     env_separation = results.get("env_separation", {"e2_active": False, "env_stems": []})
+    speech_count = results.get("speech_count", predicted_k)
+    env_count = results.get("env_count", len(active_events))
+    env_count_raw = results.get("env_count_raw", float(env_count))
+    total_sources = results.get("total_sources", speech_count + env_count)
 
     if all_4_stems:
         all_4_raw_stems = list(all_4_raw_stems) if all_4_raw_stems is not None else list(separated_stems[:4])
@@ -515,6 +519,10 @@ def _process_prediction(
         "sample_rate_hz": TARGET_SR,
         "input_rms": input_rms,
         "predicted_k": predicted_k,
+        "speech_count": speech_count,
+        "env_count": env_count,
+        "env_count_raw": env_count_raw,
+        "total_sources": total_sources,
         "raw_k": raw_k,
         "calibrated_k": calibrated_k,
         "complexity_ceiling_exceeded": complexity_ceiling,

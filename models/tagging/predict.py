@@ -353,10 +353,14 @@ def label_separated_stems(
 ) -> List[Dict[str, Any]]:
     """
     Contract 4 (Sync with Member 4 Source Separation):
-    Runs the Conformer Tagger on Member 4's separated .wav stem tracks
-    and assigns a semantic class label + confidence score to each track.
+    Runs acoustic tagging on each separated .wav stem track and solves optimal
+    1-to-1 Hungarian assignment against candidate labels so tags match stem audio.
     """
-    labeled_stems = []
+    from scipy.optimize import linear_sum_assignment
+
+    def _norm_tag(t: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", str(t).replace("FSD_", "").lower()).strip()
+
     candidate_labels = []
     candidate_confs = []
     if mixture_top_k_tags:
@@ -370,22 +374,50 @@ def label_separated_stems(
             candidate_labels.append(name)
             candidate_confs.append(float(conf))
 
-    for idx, path in enumerate(stem_wav_paths):
-        if not os.path.exists(path):
-            continue
+    valid_paths = [p for p in stem_wav_paths if os.path.exists(p)]
+    if not valid_paths:
+        return []
 
-        if candidate_labels and idx < len(candidate_labels):
-            best_tag = candidate_labels[idx]
-            conf = candidate_confs[idx]
-        else:
-            stem_res = predict_sound_tags(path, threshold=0.3, device=device)
-            best_tag = stem_res["labels"][0]
-            conf = stem_res["confidence_scores"].get(best_tag, 0.88)
+    stem_results = []
+    for path in valid_paths:
+        stem_res = predict_sound_tags(path, threshold=0.1, device=device)
+        stem_results.append((path, stem_res))
+
+    assigned_tags: List[Optional[str]] = [None] * len(stem_results)
+    assigned_confs: List[float] = [0.0] * len(stem_results)
+
+    if candidate_labels:
+        n_stems = len(stem_results)
+        n_cands = len(candidate_labels)
+        score_mat = np.zeros((n_stems, n_cands), dtype=np.float64)
+        for i, (_, sres) in enumerate(stem_results):
+            cscores = sres.get("confidence_scores", {}) or {}
+            norm_scores = {_norm_tag(k): float(v) for k, v in cscores.items()}
+            for j, cand in enumerate(candidate_labels):
+                score_mat[i, j] = float(
+                    cscores.get(cand, norm_scores.get(_norm_tag(cand), 0.0))
+                )
+
+        row_ind, col_ind = linear_sum_assignment(-score_mat)
+        for r, c in zip(row_ind, col_ind):
+            assigned_tags[r] = candidate_labels[c]
+            sc = float(score_mat[r, c])
+            assigned_confs[r] = sc if sc > 0.0 else candidate_confs[c]
+
+    labeled_stems = []
+    for i, (path, stem_res) in enumerate(stem_results):
+        best_tag = assigned_tags[i]
+        conf = assigned_confs[i]
+        if best_tag is None:
+            labels_list = stem_res.get("labels", [])
+            best_tag = labels_list[0] if labels_list else "Environmental_Event"
+            conf = float(stem_res.get("confidence_scores", {}).get(best_tag, 0.88))
 
         labeled_stems.append({
             "stem_path": path,
             "stem_track": os.path.basename(path),
             "assigned_tag": best_tag,
+            "label": best_tag,
             "stem_confidence": round(float(conf), 4)
         })
 

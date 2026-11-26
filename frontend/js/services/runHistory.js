@@ -226,6 +226,17 @@ export function getRunJson(run) {
     return rj;
 }
 
+function resolveDisplayRunCount(res, countObj, activeTags = []) {
+    const rawK = countObj.predicted_k !== undefined
+        ? countObj.predicted_k
+        : (countObj.estimated_k !== undefined ? countObj.estimated_k : (res.predicted_k !== undefined ? res.predicted_k : res.k));
+    if (rawK === undefined || rawK === null) return '—';
+    if (Number(rawK) === 0) {
+        return Number(countObj.env_count || res.env_count || activeTags.length || 0);
+    }
+    return rawK;
+}
+
 export function getRunTags(run) {
     if (!run) return [];
     const rj = getRunJson(run);
@@ -234,13 +245,13 @@ export function getRunTags(run) {
     let rawTags = tagging.active_classes || tagging.active_events || res.active_events || [];
     let tags = rawTags.map(t => typeof t === 'string' ? t : (t.event || t.class || t.label || String(t)));
 
-    // Fallback: If no AST environmental tags detected, check speech stems or K count
+    // Fallback: If no AST environmental tags detected, check speech/env stems or K count
     if (tags.length === 0) {
         const countObj = res.source_counting || {};
         const kVal = countObj.predicted_k !== undefined ? countObj.predicted_k : (countObj.estimated_k !== undefined ? countObj.estimated_k : (res.predicted_k || res.k || 0));
-        const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || [];
+        const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || res.env_separation?.env_stems || [];
         if (stems.length > 0) {
-            tags = stems.map((s, idx) => s.label || `Speaker ${idx + 1}`);
+            tags = stems.map((s, idx) => s.assigned_tag || s.label || `Speaker ${idx + 1}`);
         } else if (kVal > 0) {
             for (let i = 1; i <= Math.min(kVal, 6); i++) {
                 tags.push(`Speaker ${i}`);
@@ -885,7 +896,8 @@ export function renderRunHistoryList(containerEl, runs = []) {
     runs.forEach(run => {
         const results = run.resultJson?.results || run.resultJson || {};
         const countObj = results.source_counting || {};
-        const kVal = countObj.estimated_k !== undefined ? countObj.estimated_k : (results.k || '—');
+        const activeTags = getRunTags(run);
+        const kVal = resolveDisplayRunCount(results, countObj, activeTags);
         const modeLabel = (run.mode || 'auto').toUpperCase();
         const dateFormatted = formatDate(run.createdAt);
 
@@ -1034,10 +1046,10 @@ export function openRunDetailDrawer(run) {
     const rj = getRunJson(run);
     const res = Object.assign({}, rj, rj.results || {});
     const countObj = res.source_counting || {};
-    const kVal = countObj.predicted_k !== undefined ? countObj.predicted_k : (countObj.estimated_k !== undefined ? countObj.estimated_k : (res.predicted_k || res.k || '—'));
-    const ceilingState = countObj.complexity_ceiling || (kVal >= 4 ? 'Over-Saturated' : (kVal === 3 ? 'Complex' : 'Optimal'));
     const activeTags = getRunTags(run);
-    const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || [];
+    const kVal = resolveDisplayRunCount(res, countObj, activeTags);
+    const ceilingState = countObj.complexity_ceiling || (kVal >= 4 ? 'Over-Saturated' : (kVal === 3 ? 'Complex' : 'Optimal'));
+    const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || res.env_separation?.env_stems || [];
     const telemetry = rj.telemetry || {};
 
     const origin = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'http://localhost:8000';
@@ -1046,7 +1058,7 @@ export function openRunDetailDrawer(run) {
     if (stems && stems.length > 0) {
         stemsHtml = `
             <div class="drawer-section">
-                <h4 class="drawer-section-title">Reconstructed Speech Stems (${stems.length})</h4>
+                <h4 class="drawer-section-title">Reconstructed Audio Stems (${stems.length})</h4>
                 <div class="drawer-stems-list">
         `;
         stems.forEach((stem, idx) => {
@@ -1055,7 +1067,7 @@ export function openRunDetailDrawer(run) {
                 const clean = stemUrl.startsWith('/') ? stemUrl.slice(1) : stemUrl;
                 stemUrl = `${origin}/${clean}`;
             }
-            const stemLabel = stem.label || `Speaker Stem ${idx + 1}`;
+            const stemLabel = stem.assigned_tag || stem.label || `Stem ${idx + 1}`;
 
             stemsHtml += `
                 <div class="drawer-stem-item" data-stem-url="${escapeHtml(stemUrl)}">
@@ -1272,10 +1284,10 @@ function renderModalHistoryItems(listContainer, runs) {
         const rj = getRunJson(run);
         const res = Object.assign({}, rj, rj.results || {});
         const countObj = res.source_counting || {};
-        const kVal = countObj.predicted_k !== undefined ? countObj.predicted_k : (countObj.estimated_k !== undefined ? countObj.estimated_k : (res.predicted_k || res.k || '—'));
         const tags = getRunTags(run);
+        const kVal = resolveDisplayRunCount(res, countObj, tags);
         const tagPreview = tags.length > 0 ? tags.slice(0, 4).join(', ') + (tags.length > 4 ? ` +${tags.length - 4}` : '') : 'Active Sources';
-        const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || [];
+        const stems = res.source_separation?.stems || res.speech_separation?.stems || res.separated_stems || res.env_separation?.env_stems || [];
 
         html += `
             <div class="modal-history-item" data-run-id="${escapeHtml(run.id)}">
