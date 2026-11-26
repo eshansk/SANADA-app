@@ -1,4 +1,264 @@
 {
+  "sota_session_e1_mossformer2_speech_vs_env_16k_pt": {
+    "rel_path": "session_e1/mossformer2_speech_vs_env_16k.pt",
+    "filename": "mossformer2_speech_vs_env_16k.pt",
+    "session": "session_e1",
+    "wave": "Wave 1",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_e1/mossformer2_speech_vs_env_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 223355129,
+    "size_mb": 213.01,
+    "description": "MossFormer2 Speech vs Environmental binary classifier (16kHz)"
+  },
+  "sota_session_a_plus_sessionAplus_melati_eat_large_pt": {
+    "rel_path": "session_a_plus/sessionAplus_melati_eat_large.pt",
+    "filename": "sessionAplus_melati_eat_large.pt",
+    "session": "session_a_plus",
+    "wave": "Wave 1",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_a_plus/sessionAplus_melati_eat_large.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 1256202617,
+    "size_mb": 1198.01,
+    "description": "EAT-Large speech source counting backbone (Session A+)"
+  },
+  "sota_session_a_plus_sessionAplus_sslam_as2m_pt": {
+    "rel_path": "session_a_plus/sessionAplus_sslam_as2m.pt",
+    "filename": "sessionAplus_sslam_as2m.pt",
+    "session": "session_a_plus",
+    "wave": "Wave 1",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_a_plus/sessionAplus_sslam_as2m.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 378781421,
+    "size_mb": 361.23,
+    "description": "SS-LAM AS2M speech source counting backbone (Session A+)"
+  },
+  "sota_session_a_plus_sessionAplus_wavlm_large_pt": {
+    "rel_path": "session_a_plus/sessionAplus_wavlm_large.pt",
+    "filename": "sessionAplus_wavlm_large.pt",
+    "session": "session_a_plus",
+    "wave": "Wave 1",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_a_plus/sessionAplus_wavlm_large.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 1299628845,
+    "size_mb": 1239.42,
+    "description": "WavLM-Large speech source counting backbone (Session A+)"
+  },
+  "sota_session_a_plus_sessionAplus_meta_calibrator_json": {
+    "rel_path": "session_a_plus/sessionAplus_meta_calibrator.json",
+    "filename": "sessionAplus_meta_calibrator.json",
+    "session": "session_a_plus",
+    "wave": "Wave 1",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_a_plus/sessionAplus_meta_calibrator.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 5487,
+    "size_mb": 0.01,
+    "description": "Session A+ speech counting meta-calibrator configuration"
+  },
+  "sota_session_b_sessionB_melati_eat_large_fsd32_pt": {
+    "rel_path": "session_b/sessionB_melati_eat_large_fsd32.pt",
+    "filename": "sessionB_melati_eat_large_fsd32.pt",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_melati_eat_large_fsd32.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 1289772625,
+    "size_mb": 1230.02,
+    "description": "EAT-Large 32-class environmental acoustic classifier (Session B)"
+  },
+  "sota_session_b_sessionB_sslam_as2m_fsd32_pt": {
+    "rel_path": "session_b/sessionB_sslam_as2m_fsd32.pt",
+    "filename": "sessionB_sslam_as2m_fsd32.pt",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_sslam_as2m_fsd32.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 402828653,
+    "size_mb": 384.17,
+    "description": "SS-LAM 32-class environmental acoustic classifier (Session B)"
+  },
+  "sota_session_b_sessionB_ast13_fsd32_pt": {
+    "rel_path": "session_b/sessionB_ast13_fsd32.pt",
+    "filename": "sessionB_ast13_fsd32.pt",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_ast13_fsd32.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 386073649,
+    "size_mb": 368.19,
+    "description": "AST-13 32-class environmental acoustic classifier (Session B)"
+  },
+  "sota_session_b_sessionB_ced_base_fsd32_pt": {
+    "rel_path": "session_b/sessionB_ced_base_fsd32.pt",
+    "filename": "sessionB_ced_base_fsd32.pt",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_ced_base_fsd32.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 384159482,
+    "size_mb": 366.36,
+    "description": "CED-Base 32-class environmental acoustic classifier (Session B)"
+  },
+  "sota_session_b_sessionB_meta_calibrator_json": {
+    "rel_path": "session_b/sessionB_meta_calibrator.json",
+    "filename": "sessionB_meta_calibrator.json",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_meta_calibrator.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 3166,
+    "size_mb": 0.0,
+    "description": "Session B environmental meta-calibrator configuration"
+  },
+  "sota_session_b_sessionB_count_meta_models_pkl": {
+    "rel_path": "session_b/sessionB_count_meta_models.pkl",
+    "filename": "sessionB_count_meta_models.pkl",
+    "session": "session_b",
+    "wave": "Wave 2",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_b/sessionB_count_meta_models.pkl",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 96425,
+    "size_mb": 0.09,
+    "description": "Session B counting meta-models ensemble weights"
+  },
+  "sota_session_c1_mossformer2_2spk_spkid_16k_pt": {
+    "rel_path": "session_c1/mossformer2_2spk_spkid_16k.pt",
+    "filename": "mossformer2_2spk_spkid_16k.pt",
+    "session": "session_c1",
+    "wave": "Wave 3",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_c1/mossformer2_2spk_spkid_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 223351622,
+    "size_mb": 213.0,
+    "description": "MossFormer2 2-speaker separation specialist with SpkID (16kHz)"
+  },
+  "sota_session_c1_mossformer2_3spk_spkid_16k_pt": {
+    "rel_path": "session_c1/mossformer2_3spk_spkid_16k.pt",
+    "filename": "mossformer2_3spk_spkid_16k.pt",
+    "session": "session_c1",
+    "wave": "Wave 3",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_c1/mossformer2_3spk_spkid_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 224402246,
+    "size_mb": 214.01,
+    "description": "MossFormer2 3-speaker separation specialist with SpkID (16kHz)"
+  },
+  "sota_session_c2_mossformer2_4spk_spkid_16k_pt": {
+    "rel_path": "session_c2/mossformer2_4spk_spkid_16k.pt",
+    "filename": "mossformer2_4spk_spkid_16k.pt",
+    "session": "session_c2",
+    "wave": "Wave 3",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_c2/mossformer2_4spk_spkid_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 225452934,
+    "size_mb": 215.01,
+    "description": "MossFormer2 4-speaker separation specialist with SpkID (16kHz)"
+  },
+  "sota_session_d_mossformer2_orpit_5to9spk_16k_pt": {
+    "rel_path": "session_d/mossformer2_orpit_5to9spk_16k.pt",
+    "filename": "mossformer2_orpit_5to9spk_16k.pt",
+    "session": "session_d",
+    "wave": "Wave 3",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_d/mossformer2_orpit_5to9spk_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": true,
+    "size_bytes": 223355001,
+    "size_mb": 213.01,
+    "description": "MossFormer2 ORPIT 5-9 speaker dominant separation specialist (16kHz)"
+  },
+  "sota_session_e2_clapsep_lora_32class_env_16k_pt": {
+    "rel_path": "session_e2/clapsep_lora_32class_env_16k.pt",
+    "filename": "clapsep_lora_32class_env_16k.pt",
+    "session": "session_e2",
+    "wave": "Wave 3 (Optional)",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_e2/clapsep_lora_32class_env_16k.pt",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": false,
+    "size_bytes": 79329957,
+    "size_mb": 75.65,
+    "description": "CLAPSep LoRA 32-class environmental audio separator (16kHz)"
+  },
+  "sota_session_e2_sessionE2_clapsep_config_json": {
+    "rel_path": "session_e2/sessionE2_clapsep_config.json",
+    "filename": "sessionE2_clapsep_config.json",
+    "session": "session_e2",
+    "wave": "Wave 3 (Optional)",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_e2/sessionE2_clapsep_config.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": false,
+    "size_bytes": 518,
+    "size_mb": 0.0,
+    "description": "Session E2 CLAPSep model architecture configuration"
+  },
+  "sota_session_e2_sessionE2_class_prompts_json": {
+    "rel_path": "session_e2/sessionE2_class_prompts.json",
+    "filename": "sessionE2_class_prompts.json",
+    "session": "session_e2",
+    "wave": "Wave 3 (Optional)",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_e2/sessionE2_class_prompts.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": false,
+    "size_bytes": 6067,
+    "size_mb": 0.01,
+    "description": "Session E2 text prompt embeddings for 32 FSD classes"
+  },
+  "sota_session_f_sessionF_pipeline_config_json": {
+    "rel_path": "session_f/sessionF_pipeline_config.json",
+    "filename": "sessionF_pipeline_config.json",
+    "session": "session_f",
+    "wave": "Wave 4",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_f/sessionF_pipeline_config.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": false,
+    "size_bytes": 6210,
+    "size_mb": 0.01,
+    "description": "Session F v6 leak-free calibrated cutpoints, gates & thresholds"
+  },
+  "sota_session_f_sessionF_master_benchmarks_json": {
+    "rel_path": "session_f/sessionF_master_benchmarks.json",
+    "filename": "sessionF_master_benchmarks.json",
+    "session": "session_f",
+    "wave": "Wave 4",
+    "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/session_f/sessionF_master_benchmarks.json",
+    "status": "ready",
+    "tier": "sota_wave_1_3",
+    "required": false,
+    "size_bytes": 8418,
+    "size_mb": 0.01,
+    "description": "Session F v6 strictly blind 8-suite defense benchmark telemetry"
+  },
   "counting": {
     "filename": "wavlm_counting_pathb.pt",
     "path": "/mnt/c/projects/www/sanada_app/models/checkpoints/wavlm_counting_pathb.pt",
@@ -73,5 +333,285 @@
     "status": "missing",
     "tier": "legacy_fallback",
     "size_bytes": 0
+  },
+  "_meta": {
+    "sota_required_count": 15,
+    "sota_ready_count": 15,
+    "sota_fully_available": true,
+    "primary_tier": "sota_wave4"
+  },
+  "sota_wave_inventory": {
+    "session_e1": {
+      "session": "session_e1",
+      "wave": "Wave 1",
+      "models": [
+        {
+          "rel_path": "session_e1/mossformer2_speech_vs_env_16k.pt",
+          "filename": "mossformer2_speech_vs_env_16k.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 223355129,
+          "size_mb": 213.01,
+          "description": "MossFormer2 Speech vs Environmental binary classifier (16kHz)"
+        }
+      ],
+      "ready_count": 1,
+      "required_count": 1,
+      "fully_ready": true
+    },
+    "session_a_plus": {
+      "session": "session_a_plus",
+      "wave": "Wave 1",
+      "models": [
+        {
+          "rel_path": "session_a_plus/sessionAplus_melati_eat_large.pt",
+          "filename": "sessionAplus_melati_eat_large.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 1256202617,
+          "size_mb": 1198.01,
+          "description": "EAT-Large speech source counting backbone (Session A+)"
+        },
+        {
+          "rel_path": "session_a_plus/sessionAplus_sslam_as2m.pt",
+          "filename": "sessionAplus_sslam_as2m.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 378781421,
+          "size_mb": 361.23,
+          "description": "SS-LAM AS2M speech source counting backbone (Session A+)"
+        },
+        {
+          "rel_path": "session_a_plus/sessionAplus_wavlm_large.pt",
+          "filename": "sessionAplus_wavlm_large.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 1299628845,
+          "size_mb": 1239.42,
+          "description": "WavLM-Large speech source counting backbone (Session A+)"
+        },
+        {
+          "rel_path": "session_a_plus/sessionAplus_meta_calibrator.json",
+          "filename": "sessionAplus_meta_calibrator.json",
+          "type": "meta",
+          "required": true,
+          "ready": true,
+          "size_bytes": 5487,
+          "size_mb": 0.01,
+          "description": "Session A+ speech counting meta-calibrator configuration"
+        }
+      ],
+      "ready_count": 4,
+      "required_count": 4,
+      "fully_ready": true
+    },
+    "session_b": {
+      "session": "session_b",
+      "wave": "Wave 2",
+      "models": [
+        {
+          "rel_path": "session_b/sessionB_melati_eat_large_fsd32.pt",
+          "filename": "sessionB_melati_eat_large_fsd32.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 1289772625,
+          "size_mb": 1230.02,
+          "description": "EAT-Large 32-class environmental acoustic classifier (Session B)"
+        },
+        {
+          "rel_path": "session_b/sessionB_sslam_as2m_fsd32.pt",
+          "filename": "sessionB_sslam_as2m_fsd32.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 402828653,
+          "size_mb": 384.17,
+          "description": "SS-LAM 32-class environmental acoustic classifier (Session B)"
+        },
+        {
+          "rel_path": "session_b/sessionB_ast13_fsd32.pt",
+          "filename": "sessionB_ast13_fsd32.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 386073649,
+          "size_mb": 368.19,
+          "description": "AST-13 32-class environmental acoustic classifier (Session B)"
+        },
+        {
+          "rel_path": "session_b/sessionB_ced_base_fsd32.pt",
+          "filename": "sessionB_ced_base_fsd32.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 384159482,
+          "size_mb": 366.36,
+          "description": "CED-Base 32-class environmental acoustic classifier (Session B)"
+        },
+        {
+          "rel_path": "session_b/sessionB_meta_calibrator.json",
+          "filename": "sessionB_meta_calibrator.json",
+          "type": "meta",
+          "required": true,
+          "ready": true,
+          "size_bytes": 3166,
+          "size_mb": 0.0,
+          "description": "Session B environmental meta-calibrator configuration"
+        },
+        {
+          "rel_path": "session_b/sessionB_count_meta_models.pkl",
+          "filename": "sessionB_count_meta_models.pkl",
+          "type": "meta_pkl",
+          "required": true,
+          "ready": true,
+          "size_bytes": 96425,
+          "size_mb": 0.09,
+          "description": "Session B counting meta-models ensemble weights"
+        }
+      ],
+      "ready_count": 6,
+      "required_count": 6,
+      "fully_ready": true
+    },
+    "session_c1": {
+      "session": "session_c1",
+      "wave": "Wave 3",
+      "models": [
+        {
+          "rel_path": "session_c1/mossformer2_2spk_spkid_16k.pt",
+          "filename": "mossformer2_2spk_spkid_16k.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 223351622,
+          "size_mb": 213.0,
+          "description": "MossFormer2 2-speaker separation specialist with SpkID (16kHz)"
+        },
+        {
+          "rel_path": "session_c1/mossformer2_3spk_spkid_16k.pt",
+          "filename": "mossformer2_3spk_spkid_16k.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 224402246,
+          "size_mb": 214.01,
+          "description": "MossFormer2 3-speaker separation specialist with SpkID (16kHz)"
+        }
+      ],
+      "ready_count": 2,
+      "required_count": 2,
+      "fully_ready": true
+    },
+    "session_c2": {
+      "session": "session_c2",
+      "wave": "Wave 3",
+      "models": [
+        {
+          "rel_path": "session_c2/mossformer2_4spk_spkid_16k.pt",
+          "filename": "mossformer2_4spk_spkid_16k.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 225452934,
+          "size_mb": 215.01,
+          "description": "MossFormer2 4-speaker separation specialist with SpkID (16kHz)"
+        }
+      ],
+      "ready_count": 1,
+      "required_count": 1,
+      "fully_ready": true
+    },
+    "session_d": {
+      "session": "session_d",
+      "wave": "Wave 3",
+      "models": [
+        {
+          "rel_path": "session_d/mossformer2_orpit_5to9spk_16k.pt",
+          "filename": "mossformer2_orpit_5to9spk_16k.pt",
+          "type": "model",
+          "required": true,
+          "ready": true,
+          "size_bytes": 223355001,
+          "size_mb": 213.01,
+          "description": "MossFormer2 ORPIT 5-9 speaker dominant separation specialist (16kHz)"
+        }
+      ],
+      "ready_count": 1,
+      "required_count": 1,
+      "fully_ready": true
+    },
+    "session_e2": {
+      "session": "session_e2",
+      "wave": "Wave 3 (Optional)",
+      "models": [
+        {
+          "rel_path": "session_e2/clapsep_lora_32class_env_16k.pt",
+          "filename": "clapsep_lora_32class_env_16k.pt",
+          "type": "model",
+          "required": false,
+          "ready": true,
+          "size_bytes": 79329957,
+          "size_mb": 75.65,
+          "description": "CLAPSep LoRA 32-class environmental audio separator (16kHz)"
+        },
+        {
+          "rel_path": "session_e2/sessionE2_clapsep_config.json",
+          "filename": "sessionE2_clapsep_config.json",
+          "type": "config",
+          "required": false,
+          "ready": true,
+          "size_bytes": 518,
+          "size_mb": 0.0,
+          "description": "Session E2 CLAPSep model architecture configuration"
+        },
+        {
+          "rel_path": "session_e2/sessionE2_class_prompts.json",
+          "filename": "sessionE2_class_prompts.json",
+          "type": "config",
+          "required": false,
+          "ready": true,
+          "size_bytes": 6067,
+          "size_mb": 0.01,
+          "description": "Session E2 text prompt embeddings for 32 FSD classes"
+        }
+      ],
+      "ready_count": 0,
+      "required_count": 0,
+      "fully_ready": true
+    },
+    "session_f": {
+      "session": "session_f",
+      "wave": "Wave 4",
+      "models": [
+        {
+          "rel_path": "session_f/sessionF_pipeline_config.json",
+          "filename": "sessionF_pipeline_config.json",
+          "type": "config",
+          "required": false,
+          "ready": true,
+          "size_bytes": 6210,
+          "size_mb": 0.01,
+          "description": "Session F v6 leak-free calibrated cutpoints, gates & thresholds"
+        },
+        {
+          "rel_path": "session_f/sessionF_master_benchmarks.json",
+          "filename": "sessionF_master_benchmarks.json",
+          "type": "config",
+          "required": false,
+          "ready": true,
+          "size_bytes": 8418,
+          "size_mb": 0.01,
+          "description": "Session F v6 strictly blind 8-suite defense benchmark telemetry"
+        }
+      ],
+      "ready_count": 0,
+      "required_count": 0,
+      "fully_ready": true
+    }
   }
 }
